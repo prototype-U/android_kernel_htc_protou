@@ -203,7 +203,7 @@ static struct clkctl_acpu_speed pll0_960_pll1_245_pll2_1200_pll4_1008[] = {
 	{ 1, 600000, ACPU_PLL_2, 2, 1, 75000, 3, 6, 160000 },
 	{ 1, 800000, ACPU_PLL_2, 2, 1, 87500, 3, 6, 160000 },
 	{ 1, 1008000, ACPU_PLL_4, 6, 0, 126000, 3, 7, 200000},
-#ifdef ATIS112_CPU_OC
+#ifdef CONFIG_ATIS112_CPU_OC
 	{ 1, 1209600, ACPU_PLL_4, 6, 0, 151200, 3, 7, 200000 },
 	{ 1, 1401600, ACPU_PLL_4, 6, 0, 175000, 3, 7, 200000 },
 #endif
@@ -223,7 +223,7 @@ static struct clkctl_acpu_speed pll0_960_pll1_196_pll2_1200_pll4_1008[] = {
 	{ 1, 600000, ACPU_PLL_2, 2, 1, 75000, 3, 6, 160000 },
 	{ 1, 800000, ACPU_PLL_2, 2, 1, 87500, 3, 6, 160000 },
 	{ 1, 1008000, ACPU_PLL_4, 6, 0, 126000, 3, 7, 200000},
-#ifdef ATIS112_CPU_OC
+#ifdef CONFIG_ATIS112_CPU_OC
 	{ 1, 1209600, ACPU_PLL_4, 6, 0, 151200, 3, 7, 200000 },
 	{ 1, 1401600, ACPU_PLL_4, 6, 0, 175000, 3, 7, 200000 },
 #endif
@@ -344,7 +344,7 @@ static struct clkctl_acpu_speed pll0_960_pll1_737_pll2_1200_pll4_1008[] = {
 	{ 1, 600000, ACPU_PLL_2, 2, 1, 75000, 3, 6, 160000 },
 	{ 1, 800000, ACPU_PLL_2, 2, 1, 87500, 3, 6, 160000 },
 	{ 1, 1008000, ACPU_PLL_4, 6, 0, 126000, 3, 7, 200000},
-#ifdef ATIS112_CPU_OC
+#ifdef CONFIG_ATIS112_CPU_OC
 	{ 1, 1209600, ACPU_PLL_4, 6, 0, 151200, 3, 7, 200000 },
 	{ 1, 1401600, ACPU_PLL_4, 6, 0, 175000, 3, 7, 200000 },
 #endif
@@ -364,7 +364,7 @@ static struct clkctl_acpu_speed pll0_960_pll1_589_pll2_1200_pll4_1008[] = {
 	{ 1, 600000, ACPU_PLL_2, 2, 1, 75000, 3, 6, 160000 },
 	{ 1, 800000, ACPU_PLL_2, 2, 1, 87500, 3, 6, 160000 },
 	{ 1, 1008000, ACPU_PLL_4, 6, 0, 126000, 3, 7, 200000},
-#ifdef ATIS112_CPU_OC
+#ifdef CONFIG_ATIS112_CPU_OC
 	{ 1, 1209600, ACPU_PLL_4, 6, 0, 151200, 3, 7, 200000 },
 	{ 1, 1401600, ACPU_PLL_4, 6, 0, 175000, 3, 7, 200000 },
 #endif
