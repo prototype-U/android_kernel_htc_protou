@@ -1644,6 +1644,12 @@ config MSM_CPU_FREQ_MIN
 
 endif # CPU_FREQ_MSM
 
+config ATIS112_CPU_OC
+	bool "allow 1.4 GHZ max OC option"
+	default n
+	help
+	  Unlock the overclock freq speed @ 1.4 GHz
+
 config MSM_CPU_FREQ_ONDEMAND_MAX
         int "Max"
         default 600000
