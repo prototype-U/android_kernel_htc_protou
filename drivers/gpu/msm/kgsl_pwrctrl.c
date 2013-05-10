@@ -14,13 +14,11 @@
 #include <linux/pm_runtime.h>
 #include <mach/msm_iomap.h>
 #include <mach/msm_bus.h>
-#include <linux/delay.h>
 
 #include "kgsl.h"
 #include "kgsl_pwrscale.h"
 #include "kgsl_device.h"
 #include "kgsl_trace.h"
-#include "a2xx_reg.h"
 
 #define KGSL_PWRFLAGS_POWER_ON 0
 #define KGSL_PWRFLAGS_CLK_ON   1
@@ -284,12 +282,7 @@ static int kgsl_pwrctrl_gpubusy_show(struct device *dev,
 {
 	int ret;
 	struct kgsl_device *device = kgsl_device_from_dev(dev);
-	struct kgsl_busy *b;
-
-	if (device == NULL)
-		return -ENXIO;
-
-	b = &device->pwrctrl.busy;
+	struct kgsl_busy *b = &device->pwrctrl.busy;
 	ret = snprintf(buf, 17, "%7d %7d\n",
 				   b->on_time_old, b->time_old);
 	if (!test_bit(KGSL_PWRFLAGS_AXI_ON, &device->pwrctrl.power_flags)) {
@@ -302,7 +295,7 @@ static int kgsl_pwrctrl_gpubusy_show(struct device *dev,
 DEVICE_ATTR(gpuclk, 0644, kgsl_pwrctrl_gpuclk_show, kgsl_pwrctrl_gpuclk_store);
 DEVICE_ATTR(max_gpuclk, 0644, kgsl_pwrctrl_max_gpuclk_show,
 	kgsl_pwrctrl_max_gpuclk_store);
-DEVICE_ATTR(pwrnap, 0644, kgsl_pwrctrl_pwrnap_show, kgsl_pwrctrl_pwrnap_store);
+DEVICE_ATTR(pwrnap, 0664, kgsl_pwrctrl_pwrnap_show, kgsl_pwrctrl_pwrnap_store);
 DEVICE_ATTR(idle_timer, 0644, kgsl_pwrctrl_idle_timer_show,
 	kgsl_pwrctrl_idle_timer_store);
 DEVICE_ATTR(gpubusy, 0644, kgsl_pwrctrl_gpubusy_show,
@@ -357,27 +350,9 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 {
 	struct kgsl_pwrctrl *pwr = &device->pwrctrl;
 	int i = 0;
-
-	static unsigned int orig_REG_CP_DEBUG = 0;
-	static unsigned int orig_REG_RBBM_PM_OVERRIDE1 = 0;
-	static unsigned int orig_REG_RBBM_PM_OVERRIDE2 = 0;
-
 	if (state == KGSL_PWRFLAGS_OFF) {
 		if (test_and_clear_bit(KGSL_PWRFLAGS_CLK_ON,
 			&pwr->power_flags)) {
-			
-			/* Backup */
-			device->ftbl->regread(device, REG_CP_DEBUG, &orig_REG_CP_DEBUG);
-			device->ftbl->regread(device, REG_RBBM_PM_OVERRIDE1, &orig_REG_RBBM_PM_OVERRIDE1);
-			device->ftbl->regread(device, REG_RBBM_PM_OVERRIDE2, &orig_REG_RBBM_PM_OVERRIDE2);
-
-			/* Disable overrides */
-			device->ftbl->regwrite(device, REG_CP_DEBUG, orig_REG_CP_DEBUG | (1 << 27));
-			device->ftbl->regwrite(device, REG_RBBM_PM_OVERRIDE1, orig_REG_RBBM_PM_OVERRIDE1 | 0xfffffffe);
-			device->ftbl->regwrite(device, REG_RBBM_PM_OVERRIDE2, orig_REG_RBBM_PM_OVERRIDE2 | 0xffffffff);
-
-			msleep(1);
-
 			trace_kgsl_clk(device, state);
 			for (i = KGSL_MAX_CLKS - 1; i > 0; i--)
 				if (pwr->grp_clks[i])
@@ -415,18 +390,6 @@ void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
 				if (pwr->grp_clks[i])
 					clk_enable(pwr->grp_clks[i]);
 			kgsl_pwrctrl_busy_time(device, false);
-
-			/* if backup available, overrides have been disabled. Wait for sometime & use restore overrides */
-			if(0 != orig_REG_CP_DEBUG) {
-				msleep(2);
-				device->ftbl->regwrite(device, REG_CP_DEBUG, orig_REG_CP_DEBUG);
-				device->ftbl->regwrite(device, REG_RBBM_PM_OVERRIDE1, orig_REG_RBBM_PM_OVERRIDE1);
-				device->ftbl->regwrite(device, REG_RBBM_PM_OVERRIDE2, orig_REG_RBBM_PM_OVERRIDE2);
-			}
-
-/*			KGSL_DRV_INFO(device, "overrides 0x%08x 0x%08x 0x%08x\n", orig_REG_CP_DEBUG,
-*				orig_REG_RBBM_PM_OVERRIDE1, orig_REG_RBBM_PM_OVERRIDE2);
-*/
 		}
 	}
 }
@@ -564,7 +527,7 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 		clk_set_rate(pwr->grp_clks[0], pwr->
 				pwrlevels[pwr->num_pwrlevels - 1].gpu_freq);
 
-	pwr->gpu_reg = regulator_get(&pdev->dev, "vdd");
+	pwr->gpu_reg = regulator_get(NULL, pwr->regulator_name);
 	if (IS_ERR(pwr->gpu_reg))
 		pwr->gpu_reg = NULL;
 
@@ -747,7 +710,6 @@ _nap(struct kgsl_device *device)
 		}
 		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_OFF);
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_NAP);
-		kgsl_mmu_disable_clk(&device->mmu);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_NAP);
 		if (device->idle_wakelock.name)
 			wake_unlock(&device->idle_wakelock);
@@ -791,7 +753,6 @@ _sleep(struct kgsl_device *device)
 				gpu_freq);
 		_sleep_accounting(device);
 		kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_SLEEP);
-		kgsl_mmu_disable_clk(&device->mmu);
 		kgsl_pwrctrl_set_state(device, KGSL_STATE_SLEEP);
 		wake_unlock(&device->idle_wakelock);
 		pm_qos_update_request(&device->pm_qos_req_dma,
@@ -815,17 +776,12 @@ _slumber(struct kgsl_device *device)
 	case KGSL_STATE_ACTIVE:
 		if (!device->ftbl->isidle(device)) {
 			kgsl_pwrctrl_request_state(device, KGSL_STATE_NONE);
-			device->pwrctrl.restore_slumber = true;
 			return -EBUSY;
 		}
 		/* fall through */
 	case KGSL_STATE_NAP:
 	case KGSL_STATE_SLEEP:
 		del_timer_sync(&device->idle_timer);
-		if (!device->pwrctrl.strtstp_sleepwake)
-			kgsl_pwrctrl_pwrlevel_change(device,
-					KGSL_PWRLEVEL_NOMINAL);
-		device->pwrctrl.restore_slumber = true;
 		device->ftbl->suspend_context(device);
 		device->ftbl->stop(device);
 		_sleep_accounting(device);
@@ -931,7 +887,6 @@ void kgsl_pwrctrl_disable(struct kgsl_device *device)
 	/* Order pwrrail/clk sequence based upon platform */
 	kgsl_pwrctrl_axi(device, KGSL_PWRFLAGS_OFF);
 	kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF, KGSL_STATE_SLEEP);
-	kgsl_mmu_disable_clk(&device->mmu);
 	kgsl_pwrctrl_pwrrail(device, KGSL_PWRFLAGS_OFF);
 }
 EXPORT_SYMBOL(kgsl_pwrctrl_disable);

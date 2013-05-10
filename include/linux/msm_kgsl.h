@@ -500,10 +500,6 @@ struct kgsl_timestamp_event_genlock {
 	int handle; /* Handle of the genlock lock to release */
 };
 
-
-//HTC: Provide api for memory logger tool  
-unsigned int kgsl_get_alloc_size(void); 
-
 /*
  * Set a property within the kernel.  Uses the same structure as
  * IOCTL_KGSL_GETPROPERTY

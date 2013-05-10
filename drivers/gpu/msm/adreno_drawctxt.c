@@ -199,13 +199,8 @@ void adreno_drawctxt_destroy(struct kgsl_device *device,
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	struct adreno_context *drawctxt;
 
-	if (context == NULL) {
-		printk("kgsl warning: %s context is NULL", __FUNCTION__);
+	if (context == NULL || context->devctxt == NULL)
 		return;
-	} else if (context->devctxt == NULL) {
-		printk("kgsl warning: %s context->devctxt is NULL", __FUNCTION__);
-		return;
-	}
 
 	drawctxt = context->devctxt;
 	/* deactivate context */
@@ -221,7 +216,8 @@ void adreno_drawctxt_destroy(struct kgsl_device *device,
 		adreno_drawctxt_switch(adreno_dev, NULL, 0);
 	}
 
-	adreno_idle(device, KGSL_TIMEOUT_DEFAULT);
+	if (device->state != KGSL_STATE_HUNG)
+		adreno_idle(device, KGSL_TIMEOUT_DEFAULT);
 
 	kgsl_sharedmem_free(&drawctxt->gpustate);
 	kgsl_sharedmem_free(&drawctxt->context_gmem_shadow.gmemshadow);
@@ -275,8 +271,13 @@ void adreno_drawctxt_switch(struct adreno_device *adreno_dev,
 	}
 
 	/* already current? */
-	if (adreno_dev->drawctxt_active == drawctxt)
+	if (adreno_dev->drawctxt_active == drawctxt) {
+		if (adreno_dev->gpudev->ctxt_draw_workaround &&
+			adreno_is_a225(adreno_dev))
+				adreno_dev->gpudev->ctxt_draw_workaround(
+					adreno_dev, drawctxt);
 		return;
+	}
 
 	KGSL_CTXT_INFO(device, "from %p to %p flags %d\n",
 			adreno_dev->drawctxt_active, drawctxt, flags);

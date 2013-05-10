@@ -38,7 +38,8 @@ static int kgsl_cleanup_pt(struct kgsl_pagetable *pt)
 	/* For IOMMU only unmap the global structures to global pt */
 	if ((KGSL_MMU_TYPE_NONE != kgsl_mmu_type) &&
 		(KGSL_MMU_TYPE_IOMMU == kgsl_mmu_type) &&
-		(KGSL_MMU_GLOBAL_PT !=  pt->name))
+		(KGSL_MMU_GLOBAL_PT !=  pt->name) &&
+		(KGSL_MMU_PRIV_BANK_TABLE_NAME !=  pt->name))
 		return 0;
 	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		struct kgsl_device *device = kgsl_driver.devp[i];
@@ -57,7 +58,8 @@ static int kgsl_setup_pt(struct kgsl_pagetable *pt)
 	/* For IOMMU only map the global structures to global pt */
 	if ((KGSL_MMU_TYPE_NONE != kgsl_mmu_type) &&
 		(KGSL_MMU_TYPE_IOMMU == kgsl_mmu_type) &&
-		(KGSL_MMU_GLOBAL_PT !=  pt->name))
+		(KGSL_MMU_GLOBAL_PT !=  pt->name) &&
+		(KGSL_MMU_PRIV_BANK_TABLE_NAME !=  pt->name))
 		return 0;
 	for (i = 0; i < KGSL_DEVICE_MAX; i++) {
 		struct kgsl_device *device = kgsl_driver.devp[i];
@@ -452,9 +454,9 @@ static struct kgsl_pagetable *kgsl_mmu_createpagetableobject(
 	 * just once from this pool of the defaultpagetable
 	 */
 	if ((KGSL_MMU_TYPE_IOMMU == kgsl_mmu_get_mmutype()) &&
-		(KGSL_MMU_GLOBAL_PT == name)) {
-		pagetable->kgsl_pool = gen_pool_create(KGSL_MMU_ALIGN_SHIFT,
-						       -1);
+		((KGSL_MMU_GLOBAL_PT == name) ||
+		(KGSL_MMU_PRIV_BANK_TABLE_NAME == name))) {
+		pagetable->kgsl_pool = gen_pool_create(PAGE_SHIFT, -1);
 		if (pagetable->kgsl_pool == NULL) {
 			KGSL_CORE_ERR("gen_pool_create(%d) failed\n",
 					KGSL_MMU_ALIGN_SHIFT);
@@ -540,13 +542,14 @@ void kgsl_mmu_putpagetable(struct kgsl_pagetable *pagetable)
 }
 EXPORT_SYMBOL(kgsl_mmu_putpagetable);
 
-void kgsl_setstate(struct kgsl_mmu *mmu, uint32_t flags)
+void kgsl_setstate(struct kgsl_mmu *mmu, unsigned int context_id,
+			uint32_t flags)
 {
 	struct kgsl_device *device = mmu->device;
 	if (KGSL_MMU_TYPE_NONE == kgsl_mmu_type)
 		return;
 	else if (device->ftbl->setstate)
-		device->ftbl->setstate(device, flags);
+		device->ftbl->setstate(device, context_id, flags);
 	else if (mmu->mmu_ops->mmu_device_setstate)
 		mmu->mmu_ops->mmu_device_setstate(mmu, flags);
 }
@@ -760,7 +763,7 @@ int kgsl_mmu_pt_get_flags(struct kgsl_pagetable *pt,
 		return 0;
 
 	spin_lock(&pt->lock);
-	if (pt->tlb_flags && (1<<id)) {
+	if (pt->tlb_flags & (1<<id)) {
 		result = KGSL_MMUFLAGS_TLBFLUSH;
 		pt->tlb_flags &= ~(1<<id);
 	}
