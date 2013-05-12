@@ -29,17 +29,14 @@
 #include <mach/hardware.h>
 #include <mach/gpio.h>
 #include <mach/clk.h>
-#include <mach/msm_iomap.h>
-#include <mach/debug_display.h>
 
 #include "msm_fb.h"
 #include "mipi_dsi.h"
 #include "mdp.h"
 #include "mdp4.h"
 
-#include <mach/panel_id.h>
-
 u32 dsi_irq;
+u32 esc_byte_ratio;
 
 static boolean tlmm_settings = FALSE;
 
@@ -72,35 +69,23 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	struct msm_fb_data_type *mfd;
 	struct msm_panel_info *pinfo;
 
-	PR_DISP_DEBUG(" %s\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 	pinfo = &mfd->panel_info;
 
 	if (mdp_rev >= MDP_REV_41)
 		mutex_lock(&mfd->dma->ov_mutex);
 	else
-		htc_mdp_sem_down(current, &mfd->dma->mutex);
+		down(&mfd->dma->mutex);
 
 	mdp4_overlay_dsi_state_set(ST_DSI_SUSPEND);
 
-	/*
-	 * Description: dsi clock is need to perform shutdown.
-	 * mdp4_dsi_cmd_dma_busy_wait() will enable dsi clock if disabled.
-	 * also, wait until dma (overlay and dmap) finish.
+	/* make sure dsi clk is on so that
+	 * dcs commands can be sent
 	 */
-	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
-		if (mdp_rev >= MDP_REV_41) {
-			mdp4_dsi_cmd_dma_busy_wait(mfd);
-			mdp4_dsi_blt_dmap_busy_wait(mfd);
-			mipi_dsi_mdp_busy_wait(mfd);
-		} else {
-			mdp3_dsi_cmd_dma_busy_wait(mfd);
-		}
-	} else {
-		/* video mode, wait until fifo cleaned */
-		mipi_dsi_controller_cfg(0);
-	}
+	mipi_dsi_clk_cfg(1);
+
+	/* make sure dsi_cmd_mdp is idle */
+	mipi_dsi_cmd_mdp_busy();
 
 	/*
 	 * Desctiption: change to DSI_CMD_MODE since it needed to
@@ -124,19 +109,16 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	mdp_bus_scale_update_request(0);
 #endif
 
-	local_bh_disable();
+	spin_lock_bh(&dsi_clk_lock);
 	mipi_dsi_clk_disable();
-	local_bh_enable();
 
 	/* disbale dsi engine */
 	MIPI_OUTP(MIPI_DSI_BASE + 0x0000, 0);
 
 	mipi_dsi_phy_ctrl(0);
 
-
-	local_bh_disable();
 	mipi_dsi_ahb_ctrl(0);
-	local_bh_enable();
+	spin_unlock_bh(&dsi_clk_lock);
 
 	mipi_dsi_unprepare_clocks();
 	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
@@ -145,7 +127,7 @@ static int mipi_dsi_off(struct platform_device *pdev)
 	if (mdp_rev >= MDP_REV_41)
 		mutex_unlock(&mfd->dma->ov_mutex);
 	else
-		htc_mdp_sem_up(&mfd->dma->mutex);
+		up(&mfd->dma->mutex);
 
 	pr_debug("%s-:\n", __func__);
 
@@ -166,24 +148,19 @@ static int mipi_dsi_on(struct platform_device *pdev)
 	u32 dummy_xres, dummy_yres;
 	int target_type = 0;
 
-	PR_DISP_DEBUG(" %s\n", __func__);
-
 	mfd = platform_get_drvdata(pdev);
 	fbi = mfd->fbi;
 	var = &fbi->var;
 	pinfo = &mfd->panel_info;
+	esc_byte_ratio = pinfo->mipi.esc_byte_ratio;
 
-	if (mfd->init_mipi_lcd != 0) {
-		if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
-			mipi_dsi_pdata->dsi_power_save(1);
-	}
+	if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
+		mipi_dsi_pdata->dsi_power_save(1);
 
 	cont_splash_clk_ctrl(0);
 	mipi_dsi_prepare_clocks();
 
-	local_bh_disable();
 	mipi_dsi_ahb_ctrl(1);
-	local_bh_enable();
 
 	clk_rate = mfd->fbi->var.pixclock;
 	clk_rate = min(clk_rate, mfd->panel_info.clk_max);
@@ -195,9 +172,7 @@ static int mipi_dsi_on(struct platform_device *pdev)
 
 	mipi_dsi_phy_init(0, &(mfd->panel_info), target_type);
 
-	local_bh_disable();
 	mipi_dsi_clk_enable();
-	local_bh_enable();
 
 	MIPI_OUTP(MIPI_DSI_BASE + 0x114, 1);
 	MIPI_OUTP(MIPI_DSI_BASE + 0x114, 0);
@@ -278,29 +253,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 		wmb();
 	}
 
-/* ProtoU sharp panel workaround to fix the abnormal wave form  */
-#if defined(CONFIG_MACH_PROTODCG)
-	if ((panel_type == PANEL_ID_PROTODCG_SHARP || panel_type == PANEL_ID_PROTODCG_SHARP_C1) &&
-		mfd->init_mipi_lcd == 0) {
-		protodcg_orise_lcd_pre_off(pdev);
-		if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
-			mipi_dsi_pdata->dsi_power_save(1);
-	}
-#elif defined(CONFIG_MACH_MAGNIDS)
-	if ((panel_type == PANEL_ID_MAGNIDS_SHARP || panel_type == PANEL_ID_MAGNIDS_SHARP_C1) &&
-		mfd->init_mipi_lcd == 0) {
-		magnids_orise_lcd_pre_off(pdev);
-		if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
-			mipi_dsi_pdata->dsi_power_save(1);
-	}
-#else
-	if ((panel_type == PANEL_ID_PROTOU_SHARP || panel_type == PANEL_ID_PROTOU_SHARP_C1) &&
-		mfd->init_mipi_lcd == 0) {
-		protou_orise_lcd_pre_off(pdev);
-		if (mipi_dsi_pdata && mipi_dsi_pdata->dsi_power_save)
-			mipi_dsi_pdata->dsi_power_save(1);
-	}
-#endif
+	if (mdp_rev >= MDP_REV_41)
+		mutex_lock(&mfd->dma->ov_mutex);
+	else
+		down(&mfd->dma->mutex);
+
 	ret = panel_next_on(pdev);
 
 	mipi_dsi_op_mode_config(mipi->mode);
@@ -357,6 +314,11 @@ static int mipi_dsi_on(struct platform_device *pdev)
 #endif
 
 	mdp4_overlay_dsi_state_set(ST_DSI_RESUME);
+
+	if (mdp_rev >= MDP_REV_41)
+		mutex_unlock(&mfd->dma->ov_mutex);
+	else
+		up(&mfd->dma->mutex);
 
 	pr_debug("%s-:\n", __func__);
 

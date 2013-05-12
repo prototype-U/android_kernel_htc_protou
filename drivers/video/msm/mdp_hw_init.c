@@ -11,8 +11,6 @@
  *
  */
 
-#include <mach/panel_id.h>
-#include <mach/board.h>
 #include "mdp.h"
 
 /* mdp primary csc limit vector */
@@ -711,12 +709,6 @@ void mdp_hw_init(void)
 		 ((16 << 6) << 16) | (16) << 6);
 #endif
 
-	wmb();
-	/*
-	* Postpone the MDP clock disable for VIDEO_ONLY panels
-	*/
-	 if (((panel_type & MIPI_MODE_MASK) != MIPI_VIDEO_ONLY) || (board_mfg_mode() == 4)) {
-		/* MDP cmd block disable */
-		mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
-	 }
+	/* MDP cmd block disable */
+	mdp_pipe_ctrl(MDP_CMD_BLOCK, MDP_BLOCK_POWER_OFF, FALSE);
 }

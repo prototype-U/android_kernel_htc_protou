@@ -102,11 +102,11 @@ typedef unsigned int boolean;
 #define outp(addr, val) outp32(addr, val)
 
 #ifndef MAX
-#define  MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define  MAX( x, y ) (((x) > (y)) ? (x) : (y))
 #endif
 
 #ifndef MIN
-#define  MIN(x, y) (((x) < (y)) ? (x) : (y))
+#define  MIN( x, y ) (((x) < (y)) ? (x) : (y))
 #endif
 
 /*--------------------------------------------------------------------------*/
@@ -127,7 +127,7 @@ typedef unsigned int boolean;
 #define memory_barrier()
 
 #define assert(expr) \
-	if (!(expr)) { \
+	if(!(expr)) { \
 		printk(KERN_ERR "msm_fb: assertion failed! %s,%s,%s,line=%d\n",\
 			#expr, __FILE__, __func__, __LINE__); \
 	}
@@ -163,28 +163,28 @@ extern u32 msm_fb_msg_level;
  */
 #define MSM_FB_EMERG(msg, ...)    \
 	if (msm_fb_msg_level > 0)  \
-		printk(KERN_EMERG "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_EMERG msg, ## __VA_ARGS__);
 #define MSM_FB_ALERT(msg, ...)    \
 	if (msm_fb_msg_level > 1)  \
-		printk(KERN_ALERT "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_ALERT msg, ## __VA_ARGS__);
 #define MSM_FB_CRIT(msg, ...)    \
 	if (msm_fb_msg_level > 2)  \
-		printk(KERN_CRIT "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_CRIT msg, ## __VA_ARGS__);
 #define MSM_FB_ERR(msg, ...)    \
 	if (msm_fb_msg_level > 3)  \
-		printk(KERN_ERR "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_ERR msg, ## __VA_ARGS__);
 #define MSM_FB_WARNING(msg, ...)    \
 	if (msm_fb_msg_level > 4)  \
-		printk(KERN_WARNING "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_WARNING msg, ## __VA_ARGS__);
 #define MSM_FB_NOTICE(msg, ...)    \
 	if (msm_fb_msg_level > 5)  \
-		printk(KERN_NOTICE "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_NOTICE msg, ## __VA_ARGS__);
 #define MSM_FB_INFO(msg, ...)    \
 	if (msm_fb_msg_level > 6)  \
-		printk(KERN_INFO "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_INFO msg, ## __VA_ARGS__);
 #define MSM_FB_DEBUG(msg, ...)    \
 	if (msm_fb_msg_level > 7)  \
-		printk(KERN_DEBUG "[DISP] "msg, ## __VA_ARGS__);
+		printk(KERN_DEBUG msg, ## __VA_ARGS__);
 
 #ifdef MSM_FB_C
 unsigned char *msm_mdp_base;

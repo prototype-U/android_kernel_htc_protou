@@ -82,20 +82,12 @@ struct lcdc_panel_info {
 	uint32 xres_pad;
 	/* Pad height */
 	uint32 yres_pad;
+	boolean is_sync_active_high;
 };
 
 struct mddi_panel_info {
 	__u32 vdopkt;
 	boolean is_type1;
-};
-
-/* DSI PHY configuration */
-struct mipi_dsi_phy_ctrl {
-	uint32 regulator[5];
-	uint32 timing[12];
-	uint32 ctrl[4];
-	uint32 strength[4];
-	uint32 pll[21];
 };
 
 struct mipi_panel_info {
@@ -138,6 +130,8 @@ struct mipi_panel_info {
 	char mdp_trigger;
 	char dma_trigger;
 	uint32 dsi_pclk_rate;
+	/* byte to esc clk ratio */
+	uint32 esc_byte_ratio;
 	/* The packet-size should not bet changed */
 	char no_max_pkt_size;
 	/* Clock required during LP commands */
@@ -173,6 +167,7 @@ struct msm_panel_info {
 	__u32 clk_max;
 	__u32 frame_count;
 	__u32 is_3d_panel;
+	__u32 frame_rate;
 
 
 	struct mddi_panel_info mddi;
@@ -194,14 +189,10 @@ struct msm_fb_panel_data {
 	void (*set_rect) (int x, int y, int xres, int yres);
 	void (*set_vsync_notifier) (msm_fb_vsync_handler_type, void *arg);
 	void (*set_backlight) (struct msm_fb_data_type *);
-	void (*display_on) (struct msm_fb_data_type *);
 
 	/* function entry chain */
 	int (*on) (struct platform_device *pdev);
 	int (*off) (struct platform_device *pdev);
-	void (*bklswitch) (struct msm_fb_data_type *, bool on);
-	void (*bklctrl) (struct msm_fb_data_type *, bool on);
-	void (*panel_type_detect) (struct mipi_panel_info *);
 	int (*power_ctrl) (boolean enable);
 	struct platform_device *next;
 	int (*clk_func) (int enable);
