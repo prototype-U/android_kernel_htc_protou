@@ -154,7 +154,20 @@ static void mipi_dsi_pclk_ctrl(struct dsi_clk_desc *clk, int clk_en)
 
 static void mipi_dsi_calibration(void)
 {
+	uint32 data;
+
+	MIPI_OUTP(MIPI_DSI_BASE + 0xf4, 0x0000ff11); /* cal_ctrl */
 	MIPI_OUTP(MIPI_DSI_BASE + 0xf8, 0x00a105a1); /* cal_hw_ctrl */
+	MIPI_OUTP(MIPI_DSI_BASE + 0xf0, 0x01); /* cal_hw_trigger */
+
+	while (1) {
+		data = MIPI_INP(MIPI_DSI_BASE + 0xfc); /* cal_status */
+		if ((data & 0x10000000) == 0)
+			break;
+
+		udelay(10);
+	}
+
 }
 
 #define PREF_DIV_RATIO 19
@@ -317,24 +330,6 @@ void mipi_dsi_phy_init(int panel_ndx, struct msm_panel_info const *panel_info,
 
 void cont_splash_clk_ctrl(int enable)
 {
-	static int cont_splash_clks_enabled;
-	if (enable && !cont_splash_clks_enabled) {
-		clk_prepare_enable(dsi_ref_clk);
-		clk_prepare_enable(mdp_dsi_pclk);
-		clk_prepare_enable(dsi_byte_div_clk);
-		clk_prepare_enable(dsi_esc_clk);
-		clk_prepare_enable(dsi_pixel_clk);
-		clk_prepare_enable(dsi_clk);
-		cont_splash_clks_enabled = 1;
-	} else if (!enable && cont_splash_clks_enabled) {
-		clk_disable_unprepare(dsi_clk);
-		clk_disable_unprepare(dsi_pixel_clk);
-		clk_disable_unprepare(dsi_esc_clk);
-		clk_disable_unprepare(dsi_byte_div_clk);
-		clk_disable_unprepare(mdp_dsi_pclk);
-		clk_disable_unprepare(dsi_ref_clk);
-		cont_splash_clks_enabled = 0;
-	}
 }
 
 void mipi_dsi_prepare_clocks(void)
@@ -475,14 +470,13 @@ void update_lane_config(struct msm_panel_info *pinfo)
 
 	pd = (pinfo->mipi).dsi_phy_db;
 	pinfo->mipi.data_lane1 = FALSE;
-	pd->pll[10] |= 0x08;
 
-	pinfo->yres = 320;
+	pinfo->yres = 480;
 	pinfo->lcdc.h_back_porch = 15;
-	pinfo->lcdc.h_front_porch = 21;
+	pinfo->lcdc.h_front_porch = 10;
 	pinfo->lcdc.h_pulse_width = 5;
 	pinfo->lcdc.v_back_porch = 50;
-	pinfo->lcdc.v_front_porch = 101;
-	pinfo->lcdc.v_pulse_width = 50;
+	pinfo->lcdc.v_front_porch = 50;
+	pinfo->lcdc.v_pulse_width = 5;
 }
 #endif
