@@ -130,6 +130,7 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
+	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -139,6 +140,9 @@ struct msm_fb_data_type {
 			      struct mdp_histogram_data *hist);
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
+	void (*vsync_ctrl) (int enable);
+  	void (*vsync_init) (int cndx);
+  	void *vsync_show;
 	void *cursor_buf;
 	void *cursor_buf_phys;
 
@@ -179,6 +183,7 @@ struct msm_fb_data_type {
 	struct timer_list msmfb_no_update_notify_timer;
 	struct completion msmfb_update_notify;
 	struct completion msmfb_no_update_notify;
+	int vsync_sysfs_created;
 	struct mutex writeback_mutex;
 	struct mutex unregister_mutex;
 	struct list_head writeback_busy_queue;
