@@ -14,10 +14,10 @@
 #ifndef _HTC_BATTERY_H_
 #define _HTC_BATTERY_H_
 #include <linux/notifier.h>
+#include <linux/device.h>
 #include <linux/power_supply.h>
 #include <mach/htc_battery_common.h>
 
-/* information about the system we're running on */
 extern unsigned int system_rev;
 
 enum batt_ctl_t {
@@ -32,14 +32,12 @@ enum batt_ctl_t {
 	DISABLE_MIN_TAPER
 };
 
-/* This order is the same as htc_power_supplies[]
- * And it's also the same as htc_cable_status_update()
- */
 enum {
 	GUAGE_NONE,
 	GUAGE_MODEM,
 	GUAGE_DS2784,
 	GUAGE_DS2746,
+	GAUGE_MAX17050,
 };
 
 enum {
@@ -53,20 +51,21 @@ enum {
 };
 
 struct battery_info_reply {
-	u32 batt_id;		/* Battery ID from ADC */
-	u32 batt_vol;		/* Battery voltage from ADC */
-	s32 batt_temp;		/* Battery Temperature (C) from formula and ADC */
-	s32 batt_current;	/* Battery current from ADC */
-	u32 level;		/* formula */
-	u32 charging_source;	/* 0: no cable, 1:usb, 2:AC */
-	u32 charging_enabled;	/* 0: Disable, 1: Enable */
-	u32 full_bat;		/* Full capacity of battery (mAh) */
-	u32 full_level;		/* Full Level */
-	u32 over_vchg;		/* 0:normal, 1:over voltage charger */
-	s32 eval_current;	/* System loading current from ADC */
-	u32 temp_fault;		/* Battery temperature fault */
-	u32 overloading_charge; /*Charging but Overloading*/
-	u32 thermal_temp; /*Thermal temperature*/
+	u32 batt_id;		
+	u32 batt_vol;		
+	s32 batt_temp;		
+	s32 batt_current;	
+	u32 level;		
+	u32 charging_source;	
+	u32 charging_enabled;	
+	u32 full_bat;		
+	u32 full_level;		
+	u32 over_vchg;		
+	s32 eval_current;	
+	u32 temp_fault;		
+	u32 overloading_charge; 
+	u32 thermal_temp; 
+	u32 batt_state;
 };
 
 struct htc_battery_platform_data {
@@ -87,6 +86,8 @@ struct htc_battery_platform_data {
 	int charger_re_enable;
 	int chg_limit_active_mask;
 	int suspend_highfreq_check_reason;
+	int enable_bootup_voltage;
+	int gpio_vbus_det;
 
 };
 
@@ -108,13 +109,13 @@ extern int get_cable_status(void);
 
 extern unsigned int batt_get_status(enum power_supply_property psp);
 
-#ifdef CONFIG_BATTERY_DS2746
+#if (defined(CONFIG_BATTERY_DS2746) || defined(CONFIG_BATTERY_MAX17050))
 int htc_battery_update_change(int force_update);
-#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_PROTODUG) || defined(CONFIG_MACH_PROTODCG) || defined(CONFIG_MACH_MAGNIDS))
-extern int get_batt_id(void); // This is for PrimoDS, use gauge ic but without id register
+#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
+extern int get_batt_id(void); 
 extern void set_smem_chg_avalible(int chg_avalible);
 #endif
-extern int get_cable_type(void); // for cable_status_handler_func wrong issue, henc update from share memory
+extern int get_cable_type(void); 
 #endif
 #ifdef CONFIG_THERMAL_TEMPERATURE_READ
 extern int htc_get_thermal_adc_level(uint32_t *buffer);

@@ -47,6 +47,8 @@ struct tps65200_platform_data {
 #ifdef CONFIG_SUPPORT_DQ_BATTERY
 	int dq_result;
 #endif
+	int auto_kick;
+	int check_ovp;
 };
 
 struct tps65200_chg_int_notifier {
@@ -63,8 +65,8 @@ extern u8 batt_charging_state;
 extern int tps_set_charger_ctrl(u32 ctl);
 extern int tps_register_notifier(struct tps65200_chg_int_notifier *notifier);
 extern int tps65200_mask_interrupt_register(int status);
+extern void tps65200_kick_charger_ic(int charge_enable);
 #else
-/* static int tps_set_charger_ctrl(u32 ctl) { return 0 ; } */
 extern int tps_register_notifier(struct tps65200_chg_int_notifier *notifier) { return 0; }
 #endif
 #endif

@@ -20,7 +20,6 @@
 #include <linux/pmic8058-xoadc.h>
 #include <linux/platform_device.h>
 #include <linux/gpio.h>
-/*#include <linux/msm_adc.h>*/
 #include <mach/board.h>
 
 #include <mach/cable_detect.h>
@@ -45,7 +44,6 @@
 
 extern int msm_otg_get_vbus_state(void);
 
-/*#define MHL_INTERNAL_POWER 1*/
 static int vbus;
 
 static struct switch_dev dock_switch = {
@@ -67,7 +65,7 @@ struct cable_detect_info {
 	int vbus_mpp_irq;
 	int vbus_uevent;
 	enum usb_connect_type connect_type;
-	/*for accessory*/
+	
 	int usb_id_pin_gpio;
 	__u8 detect_type;
 	__u8 accessory_type;
@@ -107,9 +105,6 @@ struct cable_detect_info {
 } the_cable_info;
 
 
-/* ---------------------------------------------------------------------------
-			Routine prototype
------------------------------------------------------------------------------*/
 static irqreturn_t vbus_irq_handler(int irq, void *dev_id);
 #ifdef CONFIG_CABLE_DETECT_ACCESSORY
 static int64_t cable_detect_get_adc(void);
@@ -159,8 +154,8 @@ static void send_cable_connect_notify(int cable_type)
 			if (notifier->func != NULL) {
 				CABLE_INFO("Send to: %s, type %d\n",
 						notifier->name, cable_type);
-				/* Notify other drivers about connect type. */
-				/* use slow charging for unknown type*/
+				
+				
 				notifier->func(cable_type);
 			}
 		}
@@ -193,8 +188,8 @@ static void send_usb_host_connect_notify(int cable_in)
 		if (notifier->func != NULL) {
 			CABLE_INFO("[HostNotify] Send to: %s: %d\n",
 					notifier->name, cable_in);
-			/* Notify other drivers about connect type. */
-			/* use slow charging for unknown type*/
+			
+			
 			notifier->func(cable_in);
 		}
 	}
@@ -320,7 +315,6 @@ static int cable_detect_get_type(struct cable_detect_info *pInfo)
 
 }
 
-/* detect accessory by USB PHY id pin*/
 extern int htc_get_accessory_state(void);
 static int phy_id_detect(struct cable_detect_info *pInfo)
 {
@@ -370,7 +364,7 @@ static void cable_detect_handler(struct work_struct *w)
 		return;
 #ifdef CONFIG_FB_MSM_HDMI_MHL_SII9234
 	if (pInfo->mhl_reset_gpio != 0)
-		gpio_set_value(pInfo->mhl_reset_gpio, 0); /* Reset Low */
+		gpio_set_value(pInfo->mhl_reset_gpio, 0); 
 #endif
 	if (pInfo->detect_type == CABLE_TYPE_PMIC_ADC) {
 		accessory_type = cable_detect_get_type(pInfo);
@@ -386,7 +380,7 @@ static void cable_detect_handler(struct work_struct *w)
 
 #ifdef CONFIG_FB_MSM_HDMI_MHL_SII9234
 	if (pInfo->mhl_reset_gpio != 0)
-		gpio_set_value(pInfo->mhl_reset_gpio, 1); /* Reset High */
+		gpio_set_value(pInfo->mhl_reset_gpio, 1); 
 
 	if (accessory_type != DOCK_STATE_MHL)
 		D2ToD3();
@@ -427,6 +421,9 @@ static void cable_detect_handler(struct work_struct *w)
 #if (defined(CONFIG_USB_OTG) && defined(CONFIG_USB_OTG_HOST))
 	case DOCK_STATE_USB_HOST:
 		CABLE_INFO("USB Host inserted\n");
+		switch_set_state(&dock_switch, DOCK_STATE_USB_HOST);
+		if(!msm_otg_get_vbus_state())
+			send_cable_connect_notify(CONNECT_TYPE_INTERNAL);
 		send_usb_host_connect_notify(1);
 		pInfo->accessory_type = DOCK_STATE_USB_HOST;
 		break;
@@ -470,6 +467,7 @@ static void cable_detect_handler(struct work_struct *w)
 			CABLE_INFO("USB host cable removed\n");
 			pInfo->accessory_type = DOCK_STATE_UNDOCKED;
 			send_usb_host_connect_notify(0);
+			switch_set_state(&dock_switch, DOCK_STATE_UNDOCKED);
 			break;
 #endif
 		case DOCK_STATE_DMB:
@@ -592,7 +590,7 @@ static ssize_t dock_status_show(struct device *dev,
 
 	if (pInfo->accessory_type == 1)
 		return sprintf(buf, "online\n");
-	else if (pInfo->accessory_type == 3) /*desk dock*/
+	else if (pInfo->accessory_type == 3) 
 		return sprintf(buf, "online\n");
 	else
 		return sprintf(buf, "offline\n");
@@ -715,8 +713,8 @@ static struct t_mhl_status_notifier mhl_status_notifier = {
 	.name = "mhl_detect",
 	.func = mhl_status_notifier_func,
 };
-#endif /*CONFIG_FB_MSM_HDMI_MHL_SII9234*/
-#endif /*CONFIG_CABLE_DETECT_ACCESSORY*/
+#endif 
+#endif 
 
 #ifdef CONFIG_CABLE_DETECT_GPIO_DOCK
 static irqreturn_t dock_interrupt(int irq, void *data)
@@ -1011,7 +1009,7 @@ static irqreturn_t vbus_irq_handler(int irq, void *dev_id)
 
 struct platform_driver cable_detect_driver = {
 	.probe = cable_detect_probe,
-	/*.remove = __devexit_p(vbus_cable_detect_remove),*/
+	
 	.driver = {
 		.name	= "cable_detect",
 		.owner = THIS_MODULE,
@@ -1030,11 +1028,11 @@ static void usb_status_notifier_func(int cable_type)
 	} else if (pInfo->accessory_adc > 0 && pInfo->accessory_adc < 150) {
 		pInfo->connect_type = cable_type;
 		send_cable_connect_notify(cable_type);
-		/*enable MHL*/
+		
 		gpio_set_value(pInfo->mhl_usb_sel_gpio, 1);
 		gpio_set_value(pInfo->mhl_reset_gpio, 1);
 	} else if (cable_type == CONNECT_TYPE_NONE) {
-		/*disable MHL*/
+		
 		gpio_set_value(pInfo->mhl_usb_sel_gpio, 0);
 		gpio_set_value(pInfo->mhl_reset_gpio, 0);
 		pInfo->connect_type = cable_type;

@@ -27,11 +27,9 @@
 
 #include <net/bluetooth/hci.h>
 
-/* HCI upper protocols */
 #define HCI_PROTO_L2CAP	0
 #define HCI_PROTO_SCO	1
 
-/* HCI Core structures */
 struct inquiry_data {
 	bdaddr_t	bdaddr;
 	__u8		pscan_rep_mode;
@@ -202,9 +200,11 @@ struct hci_dev {
 
 	struct work_struct	power_on;
 	struct work_struct	power_off;
+	struct work_struct	dev_close;
 	struct timer_list	off_timer;
 
 	struct timer_list	cmd_timer;
+	struct timer_list	dev_close_timer;
 	struct tasklet_struct	cmd_task;
 	struct tasklet_struct	rx_task;
 	struct tasklet_struct	tx_task;
@@ -304,16 +304,11 @@ struct hci_conn {
 	__u8		auth_initiator;
 	__u8		power_save;
 	__u16		disc_timeout;
-	__u16		conn_timeout;
 	unsigned long	pend;
 
 	__u8		remote_cap;
 	__u8		remote_oob;
 	__u8		remote_auth;
-
-	__s8	rssi_threshold;
-	__u16	rssi_update_interval;
-	__u8	rssi_update_thresh_exceed;
 
 	unsigned int	sent;
 
@@ -321,7 +316,6 @@ struct hci_conn {
 
 	struct timer_list disc_timer;
 	struct timer_list idle_timer;
-	struct delayed_work	rssi_update_work;
 	struct timer_list encrypt_pause_timer;
 
 	struct work_struct work_add;
@@ -340,15 +334,15 @@ struct hci_conn {
 
 	struct hci_conn	*link;
 
-	/* Low Energy SMP pairing data */
-	__u8		oob; /* OOB pairing supported */
-	__u8		tk_valid; /* TK value is valid */
-	__u8		cfm_pending; /* CONFIRM cmd may be sent */
-	__u8		preq[7]; /* Pairing Request */
-	__u8		prsp[7]; /* Pairing Response */
-	__u8		prnd[16]; /* Pairing Random */
-	__u8		pcnf[16]; /* Pairing Confirm */
-	__u8		tk[16]; /* Temporary Key */
+	
+	__u8		oob; 
+	__u8		tk_valid; 
+	__u8		cfm_pending; 
+	__u8		preq[7]; 
+	__u8		prsp[7]; 
+	__u8		prnd[16]; 
+	__u8		pcnf[16]; 
+	__u8		tk[16]; 
 	__u8		smp_key_size;
 	__u8		sec_req;
 	__u8		auth;
@@ -379,9 +373,8 @@ extern struct list_head hci_cb_list;
 extern rwlock_t hci_dev_list_lock;
 extern rwlock_t hci_cb_list_lock;
 
-/* ----- Inquiry cache ----- */
-#define INQUIRY_CACHE_AGE_MAX   (HZ*30)   /* 30 seconds */
-#define INQUIRY_ENTRY_AGE_MAX   (HZ*60)   /* 60 seconds */
+#define INQUIRY_CACHE_AGE_MAX   (HZ*30)   
+#define INQUIRY_ENTRY_AGE_MAX   (HZ*60)   
 
 #define inquiry_cache_lock(c)		spin_lock(&c->lock)
 #define inquiry_cache_unlock(c)		spin_unlock(&c->lock)
@@ -415,7 +408,6 @@ static inline long inquiry_entry_age(struct inquiry_entry *e)
 struct inquiry_entry *hci_inquiry_cache_lookup(struct hci_dev *hdev, bdaddr_t *bdaddr);
 void hci_inquiry_cache_update(struct hci_dev *hdev, struct inquiry_data *data);
 
-/* ----- HCI Connections ----- */
 enum {
 	HCI_CONN_AUTH_PEND,
 	HCI_CONN_ENCRYPT_PEND,
@@ -588,7 +580,10 @@ static inline void hci_chan_hold(struct hci_chan *chan)
 }
 int hci_chan_put(struct hci_chan *chan);
 
-struct hci_chan *hci_chan_create(struct hci_chan *chan,
+struct hci_chan *hci_chan_accept(struct hci_conn *hcon,
+				struct hci_ext_fs *tx_fs,
+				struct hci_ext_fs *rx_fs);
+struct hci_chan *hci_chan_create(struct hci_conn *hcon,
 				struct hci_ext_fs *tx_fs,
 				struct hci_ext_fs *rx_fs);
 void hci_chan_modify(struct hci_chan *chan,
@@ -598,10 +593,6 @@ void hci_chan_modify(struct hci_chan *chan,
 struct hci_conn *hci_connect(struct hci_dev *hdev, int type,
 					__u16 pkt_type, bdaddr_t *dst,
 					__u8 sec_level, __u8 auth_type);
-struct hci_conn *hci_le_connect(struct hci_dev *hdev, __u16 pkt_type,
-					bdaddr_t *dst, __u8 sec_level,
-					__u8 auth_type,
-					struct bt_le_params *le_params);
 int hci_conn_check_link_mode(struct hci_conn *conn);
 int hci_conn_security(struct hci_conn *conn, __u8 sec_level, __u8 auth_type);
 int hci_conn_change_link_key(struct hci_conn *conn);
@@ -614,10 +605,6 @@ void hci_conn_enter_sniff_mode(struct hci_conn *conn);
 
 void hci_conn_hold_device(struct hci_conn *conn);
 void hci_conn_put_device(struct hci_conn *conn);
-
-void hci_conn_set_rssi_reporter(struct hci_conn *conn,
-		s8 rssi_threshold, u16 interval, u8 updateOnThreshExceed);
-void hci_conn_unset_rssi_reporter(struct hci_conn *conn);
 
 static inline void hci_conn_hold(struct hci_conn *conn)
 {
@@ -643,7 +630,6 @@ static inline void hci_conn_put(struct hci_conn *conn)
 	}
 }
 
-/* ----- HCI Devices ----- */
 static inline void __hci_dev_put(struct hci_dev *d)
 {
 	if (atomic_dec_and_test(&d->refcnt))
@@ -720,7 +706,7 @@ int hci_add_remote_oob_data(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 *hash,
 								u8 *randomizer);
 int hci_remove_remote_oob_data(struct hci_dev *hdev, bdaddr_t *bdaddr);
 
-#define ADV_CLEAR_TIMEOUT (3*60*HZ) /* Three minutes */
+#define ADV_CLEAR_TIMEOUT (3*60*HZ) 
 int hci_adv_entries_clear(struct hci_dev *hdev);
 struct adv_entry *hci_find_adv_entry(struct hci_dev *hdev, bdaddr_t *bdaddr);
 int hci_add_adv_entry(struct hci_dev *hdev,
@@ -742,7 +728,6 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 
 #define SET_HCIDEV_DEV(hdev, pdev) ((hdev)->parent = (pdev))
 
-/* ----- LMP capabilities ----- */
 #define lmp_rswitch_capable(dev)   ((dev)->features[0] & LMP_RSWITCH)
 #define lmp_encrypt_capable(dev)   ((dev)->features[0] & LMP_ENCRYPT)
 #define lmp_sniff_capable(dev)     ((dev)->features[0] & LMP_SNIFF)
@@ -752,7 +737,6 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_no_flush_capable(dev)  ((dev)->features[6] & LMP_NO_FLUSH)
 #define lmp_le_capable(dev)        ((dev)->features[4] & LMP_LE)
 
-/* ----- HCI protocols ----- */
 struct hci_proto {
 	char		*name;
 	unsigned int	id;
@@ -906,7 +890,6 @@ static inline void hci_proto_destroy_cfm(struct hci_chan *chan, __u8 status)
 int hci_register_proto(struct hci_proto *hproto);
 int hci_unregister_proto(struct hci_proto *hproto);
 
-/* ----- HCI callbacks ----- */
 struct hci_cb {
 	struct list_head list;
 
@@ -991,7 +974,6 @@ int hci_unregister_cb(struct hci_cb *hcb);
 int hci_register_notifier(struct notifier_block *nb);
 int hci_unregister_notifier(struct notifier_block *nb);
 
-/* AMP Manager event callbacks */
 struct amp_mgr_cb {
 	struct list_head list;
 	void (*amp_cmd_complete_event) (struct hci_dev *hdev, __u16 opcode,
@@ -1020,11 +1002,9 @@ void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode);
 
 void hci_si_event(struct hci_dev *hdev, int type, int dlen, void *data);
 
-/* ----- HCI Sockets ----- */
 void hci_send_to_sock(struct hci_dev *hdev, struct sk_buff *skb,
 							struct sock *skip_sk);
 
-/* Management interface */
 int mgmt_control(struct sock *sk, struct msghdr *msg, size_t len);
 int mgmt_index_added(u16 index);
 int mgmt_index_removed(u16 index);
@@ -1051,8 +1031,6 @@ int mgmt_read_local_oob_data_reply_complete(u16 index, u8 *hash, u8 *randomizer,
 								u8 status);
 int mgmt_device_found(u16 index, bdaddr_t *bdaddr, u8 type, u8 le,
 				u8 *dev_class, s8 rssi, u8 eir_len, u8 *eir);
-void mgmt_read_rssi_complete(u16 index, s8 rssi, bdaddr_t *bdaddr,
-				u16 handle, u8 status);
 int mgmt_remote_name(u16 index, bdaddr_t *bdaddr, u8 status, u8 *name);
 void mgmt_inquiry_started(u16 index);
 void mgmt_inquiry_complete_evt(u16 index, u8 status);
@@ -1060,14 +1038,12 @@ void mgmt_disco_timeout(unsigned long data);
 void mgmt_disco_le_timeout(unsigned long data);
 int mgmt_encrypt_change(u16 index, bdaddr_t *bdaddr, u8 status);
 
-/* LE SMP Management interface */
 int le_user_confirm_reply(struct hci_conn *conn, u16 mgmt_op, void *cp);
 int mgmt_remote_class(u16 index, bdaddr_t *bdaddr, u8 dev_class[3]);
 int mgmt_remote_version(u16 index, bdaddr_t *bdaddr, u8 ver, u16 mnf,
 							u16 sub_ver);
 int mgmt_remote_features(u16 index, bdaddr_t *bdaddr, u8 features[8]);
 
-/* HCI info for socket */
 #define hci_pi(sk) ((struct hci_pinfo *) sk)
 
 struct hci_pinfo {
@@ -1078,7 +1054,6 @@ struct hci_pinfo {
 	unsigned short   channel;
 };
 
-/* HCI security filter */
 #define HCI_SFLT_MAX_OGF  5
 
 struct hci_sec_filter {
@@ -1087,7 +1062,6 @@ struct hci_sec_filter {
 	__u32 ocf_mask[HCI_SFLT_MAX_OGF + 1][4];
 };
 
-/* ----- HCI requests ----- */
 #define HCI_REQ_DONE	  0
 #define HCI_REQ_PEND	  1
 #define HCI_REQ_CANCELED  2
@@ -1104,6 +1078,4 @@ void hci_le_start_enc(struct hci_conn *conn, __le16 ediv, __u8 rand[8],
 void hci_le_ltk_reply(struct hci_conn *conn, u8 ltk[16]);
 void hci_le_ltk_neg_reply(struct hci_conn *conn);
 
-void hci_read_rssi(struct hci_conn *conn);
-
-#endif /* __HCI_CORE_H */
+#endif 

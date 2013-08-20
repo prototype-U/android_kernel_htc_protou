@@ -18,11 +18,11 @@
 #include <linux/regulator/driver.h>
 #include <linux/regulator/machine.h>
 #include <linux/clk.h>
+#include <linux/module.h>
 #include <mach/socinfo.h>
+#include <mach/proc_comm.h>
 #include "footswitch.h"
-#include "proc_comm.h"
 
-/* PCOM power rail IDs */
 #define PCOM_FS_GRP		8
 #define PCOM_FS_GRP_2D		58
 #define PCOM_FS_MDP		14
@@ -34,29 +34,12 @@
 #define PCOM_RAIL_MODE_AUTO	0
 #define PCOM_RAIL_MODE_MANUAL	1
 
-/**
- * struct footswitch - Per-footswitch data and state
- * @rdev: Regulator framework device
- * @desc: Regulator descriptor
- * @init_data: Regulator platform data
- * @pcom_id: Proc-comm ID of the footswitch
- * @is_enabled: Flag set when footswitch is enabled
- * @is_manual: Flag set when footswitch is in manual proc-comm mode
- * @has_ahb_clk: Flag set if footswitched core has an ahb_clk
- * @has_src_clk: Flag set if footswitched core has a src_clk
- * @src_clk: Controls the core clock's rate
- * @core_clk: Clocks the core
- * @ahb_clk: Clocks the core's register interface
- * @src_clk_init_rate: Rate to use for src_clk if it has not been set yet
- * @is_rate_set: Flag set if core_clk's rate has been set
- */
 struct footswitch {
 	struct regulator_dev			*rdev;
 	struct regulator_desc			desc;
 	struct regulator_init_data		init_data;
 	unsigned				pcom_id;
 	bool					is_enabled;
-	bool					is_manual;
 	struct clk				*src_clk;
 	struct clk				*core_clk;
 	struct clk				*ahb_clk;
@@ -192,11 +175,6 @@ static int get_clocks(struct device *dev, struct footswitch *fs)
 {
 	int rc;
 
-	/*
-	 * Some SoCs may not have a separate rate-settable clock.
-	 * If one can't be found, try to use the core clock for
-	 * rate-setting instead.
-	 */
 	if (fs->has_src_clk) {
 		fs->src_clk = clk_get(dev, "src_clk");
 		if (IS_ERR(fs->src_clk))
@@ -255,12 +233,15 @@ static int footswitch_probe(struct platform_device *pdev)
 	if (pdev->id >= MAX_FS)
 		return -ENODEV;
 
-	fs = &footswitches[pdev->id];
-	if (!fs->is_manual) {
-		pr_err("%s is not in manual mode\n", fs->desc.name);
-		return -EINVAL;
-	}
 	init_data = pdev->dev.platform_data;
+	fs = &footswitches[pdev->id];
+
+	rc = set_rail_state(fs->pcom_id, PCOM_CLKCTL_RPC_RAIL_ENABLE);
+	if (rc)
+		return rc;
+	rc = set_rail_mode(fs->pcom_id, PCOM_RAIL_MODE_MANUAL);
+	if (rc)
+		return rc;
 
 	rc = get_clocks(&pdev->dev, fs);
 	if (rc)
@@ -304,21 +285,6 @@ static struct platform_driver footswitch_driver = {
 
 static int __init footswitch_init(void)
 {
-	struct footswitch *fs;
-	int ret;
-
-	/*
-	 * Enable all footswitches in manual mode (ie. not controlled along
-	 * with pcom clocks).
-	 */
-	for (fs = footswitches; fs < footswitches + ARRAY_SIZE(footswitches);
-	     fs++) {
-		set_rail_state(fs->pcom_id, PCOM_CLKCTL_RPC_RAIL_ENABLE);
-		ret = set_rail_mode(fs->pcom_id, PCOM_RAIL_MODE_MANUAL);
-		if (!ret)
-			fs->is_manual = 1;
-	}
-
 	return platform_driver_register(&footswitch_driver);
 }
 subsys_initcall(footswitch_init);

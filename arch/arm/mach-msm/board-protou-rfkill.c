@@ -21,10 +21,7 @@
 #include <linux/gpio.h>
 #include <asm/mach-types.h>
 
-//#include <mach/htc_sleep_clk.h>
-//#include <mach/htc_fast_clk.h>
 
-//#include "board-protou.h"
 
 #define PROTOU_GPIO_BT_UART1_RTS        (43)
 #define PROTOU_GPIO_BT_UART1_CTS        (44)
@@ -39,29 +36,29 @@
 
 static struct rfkill *bt_rfk;
 static const char bt_name[] = "bcm4330";
+extern unsigned int system_rev;
 
-/* bt on configuration */
 static uint32_t protou_bt_on_table[] = {
 
-	/* BT_RTS */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_RTS,
 				2,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
 				GPIO_CFG_8MA),
-	/* BT_CTS */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_CTS,
 				2,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
-	/* BT_RX */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_RX,
 				2,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
-	/* BT_TX */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_TX,
 				2,
 				GPIO_CFG_OUTPUT,
@@ -69,26 +66,26 @@ static uint32_t protou_bt_on_table[] = {
 				GPIO_CFG_8MA),
 
 #if 0
-	/* BT_HOST_WAKE */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_HOST_WAKE,
 				0,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_4MA),
 #endif
-	/* BT_CHIP_WAKE */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_WAKE,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
 				GPIO_CFG_4MA),
-	/* BT_RESET_N */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_RESET_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
 				GPIO_CFG_4MA),
-	/* BT_EN */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_SD_N,
 				0,
 				GPIO_CFG_OUTPUT,
@@ -96,55 +93,54 @@ static uint32_t protou_bt_on_table[] = {
 				GPIO_CFG_4MA),
 };
 
-/* bt off configuration */
 static uint32_t protou_bt_off_table[] = {
 
-	/* BT_RTS */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_RTS,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
-	/* BT_CTS */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_CTS,
 				0,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
-	/* BT_RX */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_RX,
 				0,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
-	/* BT_TX */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_UART1_TX,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_8MA),
 
-	/* BT_RESET_N */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_RESET_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
 				GPIO_CFG_4MA),
-	/* BT_EN */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_SD_N,
 				0,
 				GPIO_CFG_OUTPUT,
 				GPIO_CFG_NO_PULL,
 				GPIO_CFG_4MA),
 #if 0
-	/* BT_HOST_WAKE */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_HOST_WAKE,
 				0,
 				GPIO_CFG_INPUT,
 				GPIO_CFG_PULL_UP,
 				GPIO_CFG_4MA),
 #endif
-	/* BT_CHIP_WAKE */
+	
 	GPIO_CFG(PROTOU_GPIO_BT_WAKE,
 				0,
 				GPIO_CFG_OUTPUT,
@@ -186,12 +182,12 @@ static void protou_config_bt_on(void)
 {
 	printk(KERN_INFO "[BT]== R ON ==\n");
 
-	/* set bt on configuration*/
+	
 	config_bt_table(protou_bt_on_table,
 				ARRAY_SIZE(protou_bt_on_table));
+	printk(KERN_INFO "rfkill check system_rev: %d\n", system_rev);
 
-	if (system_rev == 0) {  //XA
-		printk(KERN_INFO "rfkill check system_rev: %d\n", system_rev);
+	if (system_rev == 0) {  
 		config_bt_table(protou_bt_host_wake_table_xa,
 					ARRAY_SIZE(protou_bt_host_wake_table_xa));
 	} else {
@@ -201,39 +197,39 @@ static void protou_config_bt_on(void)
 
 	mdelay(2);
 
-	/* BT_RESET_N */
+	
 	gpio_set_value(PROTOU_GPIO_BT_RESET_N, 0);
 	mdelay(1);
 
-	/* BT_EN */
+	
 	gpio_set_value(PROTOU_GPIO_BT_SD_N, 0);
 	mdelay(5);
 
-	/* BT_EN */
+	
 	gpio_set_value(PROTOU_GPIO_BT_SD_N, 1);
 	mdelay(1);
 
-	/* BT_RESET_N */
+	
 	gpio_set_value(PROTOU_GPIO_BT_RESET_N, 1);
 	mdelay(2);
 
-	//temp set low before sleep mode ready
+	
 	gpio_set_value(PROTOU_GPIO_BT_WAKE, 0);
 }
 
 static void protou_config_bt_off(void)
 {
-	/* BT_RESET_N */
+	
 	gpio_set_value(PROTOU_GPIO_BT_RESET_N, 0);
 
-	/* BT_SHUTDOWN_N */
+	
 	gpio_set_value(PROTOU_GPIO_BT_SD_N, 0);
 
-	/* set bt off configuration*/
+	
 	config_bt_table(protou_bt_off_table,
 				ARRAY_SIZE(protou_bt_off_table));
 
-	if (system_rev == 0) {  //XA
+	if (system_rev == 0) {  
 		config_bt_table(protou_bt_host_wake_table_xa,
 					ARRAY_SIZE(protou_bt_host_wake_table_xa));
 	} else {
@@ -241,20 +237,20 @@ static void protou_config_bt_off(void)
 					ARRAY_SIZE(protou_bt_host_wake_table_xc));
 	}
 
-	/* BT_RTS */
+	
 	gpio_set_value(PROTOU_GPIO_BT_UART1_RTS, 1);
 
-	/* BT_CTS */
+	
 
-	/* BT_TX */
+	
 	gpio_set_value(PROTOU_GPIO_BT_UART1_TX, 1);
 
-	/* BT_RX */
+	
 
 
-	/* BT_HOST_WAKE */
+	
 
-	/* BT_CHIP_WAKE */
+	
 	gpio_set_value(PROTOU_GPIO_BT_WAKE, 0);
 
 	printk(KERN_INFO "[BT]== R OFF ==\n");}
@@ -276,11 +272,9 @@ static struct rfkill_ops protou_rfkill_ops = {
 static int protou_rfkill_probe(struct platform_device *pdev)
 {
 	int rc = 0;
-	bool default_state = true;  /* off */
+	bool default_state = true;  
 
-	/* always turn on clock? */
-	/* htc_wifi_bt_sleep_clk_ctl(CLK_ON, ID_BT);
-	mdelay(2); */
+	
 
 	bluetooth_set_power(NULL, default_state);
 
@@ -293,7 +287,7 @@ static int protou_rfkill_probe(struct platform_device *pdev)
 
 	rfkill_set_states(bt_rfk, default_state, false);
 
-	/* userspace cannot take exclusive control */
+	
 
 	rc = rfkill_register(bt_rfk);
 	if (rc)
@@ -325,8 +319,6 @@ static struct platform_driver protou_rfkill_driver = {
 
 static int __init protou_rfkill_init(void)
 {
-//	if (!machine_is_protou() || machine_is_protodug() || machine_is_magnids() || machine_is_protodcg())
-//		return 0;
 
 	return platform_driver_register(&protou_rfkill_driver);
 }

@@ -26,7 +26,6 @@
 #include "../../../arch/arm/mach-msm/proc_comm.h"
 #include <linux/leds-pm8029.h>
 
-/*#define DEBUG*/
 #ifdef DEBUG
 #define LED_DBG_LOG(fmt, ...) \
 		printk(KERN_DEBUG "[LED]" fmt, ##__VA_ARGS__)
@@ -51,12 +50,6 @@ tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec); \
 
 
 static struct workqueue_struct *led_wq;
-/*
- *brightness:	0-255
- *blink mode:	0.	aways on.
- *		1.	blink 62ms per 2s.
- *		2.	blink 1s per 2s.
- * */
 static void pm8029_led_control(struct pm8029_led_data *ldata)
 {
 	uint32_t data1, data2;
@@ -70,14 +63,14 @@ static void pm8029_led_control(struct pm8029_led_data *ldata)
 		LED_ERR_LOG("%s: Wrong LED data. brightness = %d, blink mode = %d\n",
 				__func__, brightness, blink);
 
-	/*set brightness, LPG function: case 2*/
+	
 	data1 = 0x2;
 	data2 = 0x0;
-	/*bit[0:7]: current*/
+	
 	data2 |= ldata->out_current;
-	/*bit[8:15]: brightness*/
+	
 	data2 |= (brightness << 8);
-	/*bit[16:23]: bank*/
+	
 	data2 |= (ldata->bank << 16);
 	LED_INFO_LOG("%s: %s brightness=%d, data1=0x%x, data2=0x%x\n",
 			__func__, ldata->ldev.name, brightness, data1, data2);
@@ -85,8 +78,8 @@ static void pm8029_led_control(struct pm8029_led_data *ldata)
 	if (rc)
 		LED_ERR_LOG("%s: data2 0x%x, rc=%d\n", __func__, data2, rc);
 
-	/*set blink, LPG function: case 4*/
-	if (strcmp(ldata->ldev.name, "button-backlight")) {/*amber/green*/
+	
+	if (strcmp(ldata->ldev.name, "button-backlight")) {
 		data1 = 0x4;
 		data2 = 0X00;
 		switch (blink) {
@@ -135,9 +128,9 @@ static void pm8029_led_brightness_set(struct led_classdev *led_cdev,
 	if (brightness > 0 && (ldata->flag & FIX_BRIGHTNESS))
 		brightness = ldata->init_pwm_brightness;
 	atomic_set(&ldata->brightness, brightness);
-	/*disable blink*/
+	
 	atomic_set(&ldata->blink, BLINK_DISABLE);
-	/*control led*/
+	
 	pm8029_led_control(ldata);
 
 	LED_INFO_LOG("%s: brightness = %d\n",__func__, brightness);
@@ -307,12 +300,12 @@ static void led_work_func(struct work_struct *work)
 
 	ldata = container_of(work, struct pm8029_led_data, off_timer_work);
 	LED_ALM("%s led alarm led work +" , ldata->ldev.name);
-	/*disable LED*/
+	
 	atomic_set(&ldata->brightness, 0);
 	atomic_set(&ldata->blink, 0);
 	atomic_set(&ldata->off_timer, 0);
 	pm8029_led_control(ldata);
-	//LED_ALM("%s led alarm led work -" , ldata->ldev.name);
+	
 }
 
 static void led_alarm_handler(struct alarm *alarm)
@@ -322,7 +315,7 @@ static void led_alarm_handler(struct alarm *alarm)
 	ldata = container_of(alarm, struct pm8029_led_data, off_timer_alarm);
 	LED_ALM("%s led alarm trigger +", ldata->ldev.name);
 	queue_work(led_wq, &ldata->off_timer_work);
-	//LED_ALM("%s led alarm trigger -", ldata->ldev.name);
+	
 }
 
 static int pm8029_led_probe(struct platform_device *pdev)
@@ -353,7 +346,7 @@ static int pm8029_led_probe(struct platform_device *pdev)
 	}
 
 
-	/*register led_classdev and brightness sysfs for white/green/amber LED*/
+	
 	for (i = 0; i < pdata->num_leds; i++) {
 		ldata[i].ldev.name = pdata->led_config[i].name;
 		ldata[i].bank = pdata->led_config[i].bank;
@@ -382,7 +375,7 @@ static int pm8029_led_probe(struct platform_device *pdev)
 		}
 	}
 
-	/*register blink sysfs for green/amber LED*/
+	
 	for (i = 0; i < pdata->num_leds; i++) {
 		ret = device_create_file(ldata[i].ldev.dev, &dev_attr_blink);
 		if (ret < 0){
@@ -392,7 +385,7 @@ static int pm8029_led_probe(struct platform_device *pdev)
 		}
 	}
 
-	/*register offtimer sysfs for green/amber LED*/
+	
         for (i = 0; i < pdata->num_leds; i++) {
                 ret = device_create_file(ldata[i].ldev.dev, &dev_attr_off_timer);
                 if (ret < 0){

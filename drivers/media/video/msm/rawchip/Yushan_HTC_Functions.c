@@ -16,11 +16,7 @@ Yushan_ImageChar_t	sImageChar_context;
 struct yushan_reg_t *p_yushan_regs;
 
 #define RAWCHIP_NORMAL_MODE
-/* #define RAWCHIP_LECCI_BYPASS_MODE */
-/* #define RAWCHIP_DTFILTER_BYPASS_MODE */
-/* #define RAWCHIP_COLOR_BAR_MODE */
 
-/* Each Block Enable Flag*/
 #define PDP_enable 0x01
 #define black_level_enable 0x01
 #define dead_pixel_enable 0x01
@@ -110,8 +106,6 @@ void YushanPrintImageInformation(void)
 
 }
 
-/*extern void sensor_streaming_on(void);*/
-/*extern void sensor_streaming_off(void);*/
 void Reset_Yushan(void)
 {
 	uint8_t	bSpiData;
@@ -146,7 +140,7 @@ void Reset_Yushan(void)
 	sDxoStruct.uwDxoDopStartAddr = p_yushan_regs->dopStartAddr;
 
 	pr_info("[CAM] %s S\n",__func__);
-	/*sensor_streaming_off();*/
+	
 	Yushan_Assert_Reset(0x001F0F10, RESET_MODULE);
 	bSpiData =1;
 	Yushan_DXO_Sync_Reset_Dereset(bSpiData);
@@ -156,192 +150,192 @@ void Reset_Yushan(void)
 	Yushan_Init_Dxo(&sDxoStruct, 1);
 	mdelay(10);
 	pr_info("[CAM] %s E\n",__func__);
-	/*Yushan_sensor_open_init();*/
-	/*Yushan_ContextUpdate_Wrapper(&sYushanFullContextConfig);*/
-	/*sensor_streaming_on();*/
+	
+	
+	
 }
 
 void ASIC_Test(void)
 {
 	pr_info("[CAM] ASIC_Test E\n");
 	mdelay(10);
-	// rawchip_spi_write_2B1B(0x0008, 0x6f); /* CLKMGR - CLK_CTRL */
+	
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x000c, 0x00); /* CLKMGR - RESET_CTRL */
+	rawchip_spi_write_2B1B(0x000c, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x000d, 0x00); /* CLKMGR - RESET_CTRL */
+	rawchip_spi_write_2B1B(0x000d, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x000c, 0x3f); /* CLKMGR - RESET_CTRL */
+	rawchip_spi_write_2B1B(0x000c, 0x3f); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x000d, 0x07); /* CLKMGR - RESET_CTRL */
+	rawchip_spi_write_2B1B(0x000d, 0x07); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x000f, 0x00); /* Unreferenced register - Warning */
+	rawchip_spi_write_2B1B(0x000f, 0x00); 
 	mdelay(10);
 
-	/* LDO enable sequence */
+	
 	rawchip_spi_write_2B1B(0x1405, 0x03);
 	mdelay(10);
 	rawchip_spi_write_2B1B(0x1405, 0x02);
 	mdelay(10);
 	rawchip_spi_write_2B1B(0x1405, 0x00);
 
-	/* HD */
-	//rawchip_spi_write_2B1B(0x0015, 0x14); /* Unreferenced register - Warning */
-	rawchip_spi_write_2B1B(0x0015, 0x19); /* CLKMGR - PLL_LOOP_OUT_DF */
-	rawchip_spi_write_2B1B(0x0014, 0x03); /* CLKMGR - PLL_LOOP_OUT_DF */
+	
+	
+	rawchip_spi_write_2B1B(0x0015, 0x19); 
+	rawchip_spi_write_2B1B(0x0014, 0x03); 
 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x0000, 0x0a); /* CLKMGR - CLK_DIV_FACTOR */
+	rawchip_spi_write_2B1B(0x0000, 0x0a); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x0001, 0x0a); /* Unreferenced register - Warning */
+	rawchip_spi_write_2B1B(0x0001, 0x0a); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x0002, 0x14); /* Unreferenced register - Warning */
+	rawchip_spi_write_2B1B(0x0002, 0x14); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x0010, 0x18); /* CLKMGR - PLL_CTRL_MAIN */
+	rawchip_spi_write_2B1B(0x0010, 0x18); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x0009, 0x01); /* Unreferenced register - Warning */
+	rawchip_spi_write_2B1B(0x0009, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x1000, 0x01); /* NVM - IOR_NVM_CTRL */
+	rawchip_spi_write_2B1B(0x1000, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2000, 0xff); /* MIPIRX - DPHY_SC_4SF_ENABLE */
+	rawchip_spi_write_2B1B(0x2000, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2004, 0x06); /* MIPIRX - DPHY_SC_4SF_UIX4 */
+	rawchip_spi_write_2B1B(0x2004, 0x06); 
 	mdelay(10);
-	//rawchip_spi_write_2B1B(0x5000, 0xff); /* MIPITX - DPHY_MC_4MF_ENABLE */
+	
 	mdelay(10);
-	//rawchip_spi_write_2B1B(0x5004, 0x06); /* MIPITX - DPHY_MC_4MF_UIX4 */
-	rawchip_spi_write_2B1B(0x5004, 0x14); /* MIPITX - DPHY_MC_4MF_UIX4 */
+	
+	rawchip_spi_write_2B1B(0x5004, 0x14); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2408, 0x04); /* CSI2RX - CSI2_RX_NB_DATA_LANES */
+	rawchip_spi_write_2B1B(0x2408, 0x04); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x240c, 0x0a); /* CSI2RX - CSI2_RX_IMG_UNPACKING_FORMAT */
+	rawchip_spi_write_2B1B(0x240c, 0x0a); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2420, 0x01); /* CSI2RX - CSI2_RX_BYTE2PIXEL_READ_TH */
+	rawchip_spi_write_2B1B(0x2420, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2428, 0x2b); /* CSI2RX - CSI2_RX_DATA_TYPE */
+	rawchip_spi_write_2B1B(0x2428, 0x2b); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4400, 0x01); /* SMIAF - SMIAF_CTRL */
+	rawchip_spi_write_2B1B(0x4400, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4404, 0x0a); /* SMIAF - SMIAF_PIX_WIDTH */
+	rawchip_spi_write_2B1B(0x4404, 0x0a); 
 	mdelay(10);
 
-	/* HD */
-	rawchip_spi_write_2B1B(0x4a05, 0x04); /* PW2_FIFO THRESHOLD */
+	
+	rawchip_spi_write_2B1B(0x4a05, 0x04); 
 
-	//rawchip_spi_write_2B1B(0x2c09, 0x08); /* Unreferenced register - Warning */
-	rawchip_spi_write_2B1B(0x2c09, 0x10); /* Unreferenced register - Warning */
+	
+	rawchip_spi_write_2B1B(0x2c09, 0x10); 
 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c0c, 0xd0); /* IDP_GEN - IDP_GEN_LINE_LENGTH */
+	rawchip_spi_write_2B1B(0x2c0c, 0xd0); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c0d, 0x0c); /* IDP_GEN - IDP_GEN_LINE_LENGTH */
+	rawchip_spi_write_2B1B(0x2c0d, 0x0c); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c0e, 0xa0); /* IDP_GEN - IDP_GEN_LINE_LENGTH */
+	rawchip_spi_write_2B1B(0x2c0e, 0xa0); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c0f, 0x0f); /* IDP_GEN - IDP_GEN_LINE_LENGTH */
+	rawchip_spi_write_2B1B(0x2c0f, 0x0f); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c10, 0xa0); /* IDP_GEN - IDP_GEN_FRAME_LENGTH */
+	rawchip_spi_write_2B1B(0x2c10, 0xa0); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c11, 0x09); /* IDP_GEN - IDP_GEN_FRAME_LENGTH */
+	rawchip_spi_write_2B1B(0x2c11, 0x09); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c12, 0xf0); /* IDP_GEN - IDP_GEN_FRAME_LENGTH */
+	rawchip_spi_write_2B1B(0x2c12, 0xf0); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c13, 0xff); /* IDP_GEN - IDP_GEN_FRAME_LENGTH */
+	rawchip_spi_write_2B1B(0x2c13, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3400, 0x01); /* PAT_GEN - PATTERN_GEN_ENABLE */
+	rawchip_spi_write_2B1B(0x3400, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3401, 0x00); /* PAT_GEN - PATTERN_GEN_ENABLE */
+	rawchip_spi_write_2B1B(0x3401, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3402, 0x00); /* PAT_GEN - PATTERN_GEN_ENABLE */
+	rawchip_spi_write_2B1B(0x3402, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3403, 0x00); /* PAT_GEN - PATTERN_GEN_ENABLE */
+	rawchip_spi_write_2B1B(0x3403, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3408, 0x02); /* PAT_GEN - PATTERN_GEN_PATTERN_TYPE_REQ */
+	rawchip_spi_write_2B1B(0x3408, 0x02); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x3409, 0x00); /* PAT_GEN - PATTERN_GEN_PATTERN_TYPE_REQ */
+	rawchip_spi_write_2B1B(0x3409, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x340a, 0x00); /* PAT_GEN - PATTERN_GEN_PATTERN_TYPE_REQ */
+	rawchip_spi_write_2B1B(0x340a, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x340b, 0x00); /* PAT_GEN - PATTERN_GEN_PATTERN_TYPE_REQ */
+	rawchip_spi_write_2B1B(0x340b, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5880, 0x01); /* EOFREPRE - EOFRESIZE_ENABLE */
+	rawchip_spi_write_2B1B(0x5880, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5888, 0x01); /* EOFREPRE - EOFRESIZE_AUTOMATIC_CONTROL */
+	rawchip_spi_write_2B1B(0x5888, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4400, 0x11); /* SMIAF - SMIAF_CTRL */
+	rawchip_spi_write_2B1B(0x4400, 0x11); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4408, 0x01); /* SMIAF - SMIAF_GROUPED_PARAMETER_HOLD */
+	rawchip_spi_write_2B1B(0x4408, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x440c, 0x03); /* SMIAF - SMIAF_EOF_INT_EN */
+	rawchip_spi_write_2B1B(0x440c, 0x03); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c00, 0x01); /* CSI2TX - CSI2_TX_ENABLE */
+	rawchip_spi_write_2B1B(0x4c00, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c08, 0x01); /* CSI2TX - CSI2_TX_NUMBER_OF_LANES */
+	rawchip_spi_write_2B1B(0x4c08, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c10, 0x01); /* CSI2TX - CSI2_TX_PACKET_CONTROL */
+	rawchip_spi_write_2B1B(0x4c10, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c4c, 0x14); /* CSI2TX - CSI2_TX_PACKET_SIZE_0 */
+	rawchip_spi_write_2B1B(0x4c4c, 0x14); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c4d, 0x00); /* CSI2TX - CSI2_TX_PACKET_SIZE_0 */
+	rawchip_spi_write_2B1B(0x4c4d, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c50, 0x2b); /* CSI2TX - CSI2_TX_DI_INDEX_CTRL_0 */
+	rawchip_spi_write_2B1B(0x4c50, 0x2b); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c51, 0x00); /* CSI2TX - CSI2_TX_DI_INDEX_CTRL_0 */
+	rawchip_spi_write_2B1B(0x4c51, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c5c, 0x2b); /* CSI2TX - CSI2_TX_DI_INDEX_CTRL_1 */
+	rawchip_spi_write_2B1B(0x4c5c, 0x2b); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c5d, 0x00); /* CSI2TX - CSI2_TX_DI_INDEX_CTRL_1 */
+	rawchip_spi_write_2B1B(0x4c5d, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c58, 0x04); /* CSI2TX - CSI2_TX_PACKET_SIZE_1 */
+	rawchip_spi_write_2B1B(0x4c58, 0x04); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x4c59, 0x10); /* CSI2TX - CSI2_TX_PACKET_SIZE_1 */
+	rawchip_spi_write_2B1B(0x4c59, 0x10); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5828, 0x01); /* DTFILTER0 - DTFILTER_MATCH0 */
+	rawchip_spi_write_2B1B(0x5828, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x582c, 0x02); /* DTFILTER0 - DTFILTER_MATCH1 */
+	rawchip_spi_write_2B1B(0x582c, 0x02); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5830, 0x0d); /* DTFILTER0 - DTFILTER_MATCH2 */
+	rawchip_spi_write_2B1B(0x5830, 0x0d); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5834, 0x03); /* DTFILTER0 - DTFILTER_MATCH3 */
+	rawchip_spi_write_2B1B(0x5834, 0x03); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5820, 0x01); /* DTFILTER0 - DTFILTER_ENABLE */
+	rawchip_spi_write_2B1B(0x5820, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5868, 0xff); /* DTFILTER1 - DTFILTER_MATCH0 */
+	rawchip_spi_write_2B1B(0x5868, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x586c, 0xff); /* DTFILTER1 - DTFILTER_MATCH1 */
+	rawchip_spi_write_2B1B(0x586c, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5870, 0xff); /* DTFILTER1 - DTFILTER_MATCH2 */
+	rawchip_spi_write_2B1B(0x5870, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5874, 0xff); /* DTFILTER1 - DTFILTER_MATCH3 */
+	rawchip_spi_write_2B1B(0x5874, 0xff); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5860, 0x01); /* DTFILTER1 - DTFILTER_ENABLE */
+	rawchip_spi_write_2B1B(0x5860, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c08, 0x94); /* LECCI - LECCI_MIN_INTERLINE */
+	rawchip_spi_write_2B1B(0x5c08, 0x94); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c09, 0x02); /* LECCI - LECCI_MIN_INTERLINE */
+	rawchip_spi_write_2B1B(0x5c09, 0x02); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c0c, 0xfc); /* LECCI - LECCI_OUT_BURST_CTRL */
+	rawchip_spi_write_2B1B(0x5c0c, 0xfc); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c10, 0x90); /* LECCI - LECCI_LINE_SIZE */
+	rawchip_spi_write_2B1B(0x5c10, 0x90); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c11, 0x01); /* LECCI - LECCI_LINE_SIZE */
+	rawchip_spi_write_2B1B(0x5c11, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c14, 0x01); /* LECCI - LECCI_BYPASS_CTRL */
+	rawchip_spi_write_2B1B(0x5c14, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x5c00, 0x01); /* LECCI - LECCI_ENABLE */
+	rawchip_spi_write_2B1B(0x5c00, 0x01); 
 	mdelay(10);
 
-	/* HD */
-	rawchip_spi_write_2B1B(0x5000, 0x33); /* LECCI - LECCI_ENABLE */
+	
+	rawchip_spi_write_2B1B(0x5000, 0x33); 
 	mdelay(100);
 
-	rawchip_spi_write_2B1B(0x2c00, 0x01); /* IDP_GEN - IDP_GEN_AUTO_RUN */
+	rawchip_spi_write_2B1B(0x2c00, 0x01); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c01, 0x00); /* IDP_GEN - IDP_GEN_AUTO_RUN */
+	rawchip_spi_write_2B1B(0x2c01, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c02, 0x00); /* IDP_GEN - IDP_GEN_AUTO_RUN */
+	rawchip_spi_write_2B1B(0x2c02, 0x00); 
 	mdelay(10);
-	rawchip_spi_write_2B1B(0x2c03, 0x00); /* IDP_GEN - IDP_GEN_AUTO_RUN */
+	rawchip_spi_write_2B1B(0x2c03, 0x00); 
 	msleep(2000);
 
 	pr_info("[CAM] ASIC_Test X\n");
@@ -355,31 +349,30 @@ void ASIC_Test(void)
 #endif
 int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 {
-	/* color bar test */
+	
 #ifdef RAWCHIP_COLOR_BAR_MODE
 	 int32_t rc = 0;
 	ASIC_Test();
-	/* frame_counter(); */
+	
 #else
-	/*uint16_t		uwHSizeSecondary=1640,uwVSizeSecondary=1232;*/
-	/*bool_t			bDxoBypassForTestPattern = TRUE, bTestPatternMode = 1;*/
+	
+	
 #ifdef RAWCHIP_NORMAL_MODE
 	bool_t	bBypassDxoUpload = 0;
 	Yushan_Version_Info_t sYushanVersionInfo;
 #endif
-	uint8_t			bPixelFormat = RAW10;/*, bPatternReq=2;*/
-	/*uint8_t 		bSpiFreq = 0x80; *//*SPI_CLK_8MHZ;*/
-	/* uint32_t		udwSpiFreq = 0; */
+	uint8_t			bPixelFormat = RAW10;
+	
+	
 	Yushan_Init_Struct_t	sInitStruct;
 	Yushan_Init_Dxo_Struct_t	sDxoStruct;
-//	Yushan_ImageChar_t sImageChar;
 	Yushan_GainsExpTime_t sGainsExpTime;
 	Yushan_DXO_DPP_Tuning_t sDxoDppTuning;
 	Yushan_DXO_PDP_Tuning_t sDxoPdpTuning;
 	Yushan_DXO_DOP_Tuning_t sDxoDopTuning;
 	Yushan_SystemStatus_t			sSystemStatus;
-	uint32_t		udwIntrMask[] = {0x01E38E3B, 0xCC3C2C00, 0x001B7FFB};	// DXO_DOP_NEW_FR_PR enabled
-	uint16_t		uwAssignITRGrpToPad1 = 0x008; /* Send only DOP interrupts to PAD1 */
+	uint32_t		udwIntrMask[] = {0x01E38E3B, 0xCC3C2C00, 0x001B7FFB};	
+	uint16_t		uwAssignITRGrpToPad1 = 0x008; 
        unsigned char EOTWord = 0x0f;
 
 #if 0
@@ -388,9 +381,9 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	Yushan_AF_Stats_t				sYushanAFStats[5];
 	Yushan_New_Context_Config_t		sYushanNewContextConfig;
 #endif
-	/* uint8_t bSpiData; */
+	
 	uint8_t bStatus;
-	/* uint32_t spiData; */
+	
 
 	uint16_t uwHSize = data.width;
 	uint16_t uwVSize = data.height;
@@ -402,22 +395,20 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	CDBG("[CAM] Yushan API Version : %d.%d \n", API_MAJOR_VERSION, API_MINOR_VERSION);
 
 #ifndef RAWCHIP_COLOR_BAR_MODE
-	/* Default Values */
+	
 	sInitStruct.bNumberOfLanes		=	data.lane_cnt;
 	sInitStruct.fpExternalClock		=	data.ext_clk;
 	sInitStruct.uwBitRate			=	data.bitrate;
 	sInitStruct.uwPixelFormat = 0x0A0A;
-/* Yushan API 10.0 Start */
-	/* Init of bDxoSettingCmdPerFrame */
+	
 	sInitStruct.bDxoSettingCmdPerFrame	=	1;
-/* Yushan API 10.0 End */
 
 	if ((sInitStruct.uwPixelFormat&0x0F) == 0x0A)
 		bPixelFormat = RAW10;
 	else if ((sInitStruct.uwPixelFormat&0x0F) == 0x08) {
 		if (((sInitStruct.uwPixelFormat>>8)&0x0F) == 0x08)
 			bPixelFormat = RAW8;
-		else /* 10 to 8 case */
+		else 
 			bPixelFormat = RAW10_8;
 	}
 #endif
@@ -504,37 +495,37 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	pr_info("\\*---------------------------------------*/");
 #endif
 
-	/* Configuring the SPI Freq: Dimax */
-	/* Yushan_SPIConfigure(bSpiFreq); */
+	
+	
 #if 0
-	/* Converting for Yushan */
+	
 	switch (bSpiFreq) {
-	case 0x80:	/* 8Mhz */
+	case 0x80:	
 		udwSpiFreq = 8<<16;
 		break;
-	case 0x00:	/* 4Mhz */
+	case 0x00:	
 		udwSpiFreq = 4<<16;
 		break;
-	case 0x81:	/* 2Mhz */
+	case 0x81:	
 		udwSpiFreq = 2<<16;
 		break;
-	case 0x01:	/* 1Mhz */
+	case 0x01:	
 		udwSpiFreq = 1<<16;
 		break;
-	case 0x82:	/* 500Khz = 1Mhz/2 */
+	case 0x82:	
 		udwSpiFreq = 1<<8;
 		break;
-	case 0x02:	/* 250Khz = 1Mhz/4 */
+	case 0x02:	
 		udwSpiFreq = 1<<4;
 		break;
-	case 0x03:	/* 125Khz = 1Mhz/8 */
+	case 0x03:	
 		udwSpiFreq = 1<<2;
 		break;
 	  }
 #endif
 
-	sInitStruct.fpSpiClock			=	data.spi_clk*(1<<16); /* 0x80000; */ /* udwSpiFreq; */
-	sInitStruct.fpExternalClock		=	sInitStruct.fpExternalClock << 16; /* 0x180000 for 24Mbps */
+	sInitStruct.fpSpiClock			=	data.spi_clk*(1<<16);  
+	sInitStruct.fpExternalClock		=	sInitStruct.fpExternalClock << 16; 
 
 	sInitStruct.uwActivePixels = uwHSize;
 	sInitStruct.uwLineBlankStill = uwBlkPixels;
@@ -552,30 +543,18 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	sImageChar_context.uwYEvenInc = data.y_even_inc;
 	sImageChar_context.uwYOddInc = data.y_odd_inc;
 	sImageChar_context.bBinning = data.binning_rawchip;
-/*
-	sImageChar.bImageOrientation = data.orientation;
-	sImageChar.uwXAddrStart = data.x_addr_start;
-	sImageChar.uwYAddrStart = data.y_addr_start;
-	sImageChar.uwXAddrEnd = data.x_addr_end;
-	sImageChar.uwYAddrEnd = data.y_addr_end;
-	sImageChar.uwXEvenInc = data.x_even_inc;
-	sImageChar.uwXOddInc = data.x_odd_inc;
-	sImageChar.uwYEvenInc = data.y_even_inc;
-	sImageChar.uwYOddInc = data.y_odd_inc;
-	sImageChar.bBinning = data.binning_rawchip;
-*/
 
 	memset(sInitStruct.sFrameFormat, 0, sizeof(Yushan_Frame_Format_t)*15);
 	if ((bPixelFormat == RAW8) || (bPixelFormat == RAW10_8)) {
 		CDBG("[CAM] bPixelFormat==RAW8");
-		sInitStruct.sFrameFormat[0].uwWordcount = (uwHSize);	/* For RAW10 this value should be uwHSize*10/8 */
-		sInitStruct.sFrameFormat[0].bDatatype = 0x2a;		  /* For RAW10 this value should be 0x2b */
-	} else { /* if(bPixelFormat==RAW10) */
+		sInitStruct.sFrameFormat[0].uwWordcount = (uwHSize);	
+		sInitStruct.sFrameFormat[0].bDatatype = 0x2a;		  
+	} else { 
 		CDBG("[CAM] bPixelFormat==RAW10");
-		sInitStruct.sFrameFormat[0].uwWordcount = (uwHSize*10)/8;	 /* For RAW10 this value should be uwHSize*10/8 */
-		sInitStruct.sFrameFormat[0].bDatatype = 0x2b;		  /* For RAW10 this value should be 0x2b */
+		sInitStruct.sFrameFormat[0].uwWordcount = (uwHSize*10)/8;	 
+		sInitStruct.sFrameFormat[0].bDatatype = 0x2b;		  
 	}
-	/* Overwritting Data Type for 10 to 8 Pixel format */
+	
 	if (bPixelFormat == RAW10_8) {
 		sInitStruct.sFrameFormat[0].bDatatype = 0x30;
 	}
@@ -584,7 +563,7 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 
 	sInitStruct.bValidWCEntries = 1;
 
-	sGainsExpTime.uwAnalogGainCodeGR = 0x20; /* 0x0 10x=>140; 1x=>20 */
+	sGainsExpTime.uwAnalogGainCodeGR = 0x20; 
 	sGainsExpTime.uwAnalogGainCodeR = 0x20;
 	sGainsExpTime.uwAnalogGainCodeB = 0x20;
 	sGainsExpTime.uwPreDigGainGR = 0x100;
@@ -594,7 +573,7 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	sGainsExpTime.bRedGreenRatio = 0x40;
 	sGainsExpTime.bBlueGreenRatio = 0x40;
 
-	sDxoDppTuning.bTemporalSmoothing = 0x63; /*0x80;*/
+	sDxoDppTuning.bTemporalSmoothing = 0x63; 
 	sDxoDppTuning.uwFlashPreflashRating = 0;
 	sDxoDppTuning.bFocalInfo = 0;
 
@@ -603,44 +582,44 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	sDxoPdpTuning.bDeadPixelCorrectionHiGain = 0x80;
 
 #if 0
-	sDxoDopTuning.uwForceClosestDistance = 0;	/* Removed follwing DXO recommendation */
+	sDxoDopTuning.uwForceClosestDistance = 0;	
 	sDxoDopTuning.uwForceFarthestDistance = 0;
 #endif
 	sDxoDopTuning.bEstimationMode = 1;
 
 	if (strcmp(data.sensor_name, "s5k3h2yx") == 0)
 	{
-		sDxoDopTuning.bSharpness = 0x70;//woody0x01; /*0x60;*/
-		sDxoDopTuning.bDenoisingLowGain = 0x75;//woody0x1; /* 0xFF for de-noise verify, original:0x1 */
-		sDxoDopTuning.bDenoisingMedGain = 0x60;//john0216//0x80;
-		sDxoDopTuning.bDenoisingHiGain = 0x40;//john0216//0x60; /*0x80;*/
+		sDxoDopTuning.bSharpness = 0x70;
+		sDxoDopTuning.bDenoisingLowGain = 0x75;
+		sDxoDopTuning.bDenoisingMedGain = 0x60;
+		sDxoDopTuning.bDenoisingHiGain = 0x40;
 	}
 	else if (strcmp(data.sensor_name, "imx175") == 0)
 	{
-		sDxoDopTuning.bSharpness = 0x70;//woody0x01; /*0x60;*/
-		sDxoDopTuning.bDenoisingLowGain = 0x75;//woody0x1; /* 0xFF for de-noise verify, original:0x1 */
-		sDxoDopTuning.bDenoisingMedGain = 0x70;//imx175//0x60;//john0216//0x80;
-		sDxoDopTuning.bDenoisingHiGain = 0x60;//imx175//0x40;//john0216//0x60; /*0x80;*/
+		sDxoDopTuning.bSharpness = 0x70;
+		sDxoDopTuning.bDenoisingLowGain = 0x75;
+		sDxoDopTuning.bDenoisingMedGain = 0x70;
+		sDxoDopTuning.bDenoisingHiGain = 0x60;
 	}
 	else if (strcmp(data.sensor_name, "ov5693") == 0)
 	{
-		sDxoDopTuning.bSharpness = 0x60;//0x70;//woody0x01; /*0x60;*/
-		sDxoDopTuning.bDenoisingLowGain = 0x90;//0x90;//0x75;//woody0x1; /* 0xFF for de-noise verify, original:0x1 */
-		sDxoDopTuning.bDenoisingMedGain = 0x60;//0x75;//Mu L 0820 0x60;//imx175//0x60;//john0216//0x80;
-		sDxoDopTuning.bDenoisingHiGain = 0x60;//0x75;//Mu L 0820 0x40;//imx175//0x40;//john0216//0x60; /*0x80;*/
+		sDxoDopTuning.bSharpness = 0x60;
+		sDxoDopTuning.bDenoisingLowGain = 0x90;
+		sDxoDopTuning.bDenoisingMedGain = 0x60;
+		sDxoDopTuning.bDenoisingHiGain = 0x60;
 	}
 	else
 	{
-		sDxoDopTuning.bSharpness = 0x70;//woody0x01; /*0x60;*/
-		sDxoDopTuning.bDenoisingLowGain = 0x75;//woody0x1; /* 0xFF for de-noise verify, original:0x1 */
-		sDxoDopTuning.bDenoisingMedGain = 0x75;//woody0x60;//john0216//0x80;
-		sDxoDopTuning.bDenoisingHiGain = 0x75;//woody0x40;//john0216//0x60; /*0x80;*/
+		sDxoDopTuning.bSharpness = 0x70;
+		sDxoDopTuning.bDenoisingLowGain = 0x75;
+		sDxoDopTuning.bDenoisingMedGain = 0x75;
+		sDxoDopTuning.bDenoisingHiGain = 0x75;
 	}
 
-	sDxoDopTuning.bNoiseVsDetailsLowGain = 0x90;//woody0xA0;
+	sDxoDopTuning.bNoiseVsDetailsLowGain = 0x90;
 	sDxoDopTuning.bNoiseVsDetailsMedGain = 0x80;
 	sDxoDopTuning.bNoiseVsDetailsHiGain = 0x80;
-	sDxoDopTuning.bTemporalSmoothing = 0x26; /*0x80;*/
+	sDxoDopTuning.bTemporalSmoothing = 0x26; 
 
 	gPllLocked = 0;
 	CDBG("[CAM] Yushan_common_init Yushan_Init_Clocks\n");
@@ -653,20 +632,20 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 		return -1;
 	} else
 		CDBG("[CAM] Clock Init Done \n");
-	/* Pll Locked. Done to allow auto incremental SPI transactions. */
+	
 	gPllLocked = 1;
 
-	/* Setup interrupt PAD assignment */
+	
 	Yushan_AssignInterruptGroupsToPad1(uwAssignITRGrpToPad1);
 
 	CDBG("[CAM] Yushan_common_init Yushan_Init\n");
 	bStatus = Yushan_Init(&sInitStruct) ;
 	CDBG("[CAM] Yushan_common_init Yushan_Init=%d\n", bStatus);
 
-	/* Bypass EOT - for EVENT_RX_PHY_ERR_EOT_DL1/EVENT_RX_PHY_ERR_EOT_DL2 issue */
+	
        SPI_Write(YUSHAN_MIPI_RX_EOT_BYPASS, 1, &EOTWord);
 
-	/* Initialize DCPX and CPX of Yushan */
+	
 	if (bPixelFormat == RAW10_8)
 		Yushan_DCPX_CPX_Enable();
 
@@ -674,21 +653,21 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 		pr_err("[CAM] Yushan Init FAILED\n");
 		return -1;
 	}
-	/* The initialization is done */
+	
 
 
 #ifdef RAWCHIP_LECCI_BYPASS_MODE
-	/* LECCI Bypass */
+	
 	Yushan_DXO_Lecci_Bypass();
 #endif
 #ifdef RAWCHIP_DTFILTER_BYPASS_MODE
-	/* DTFliter Bypass */
+	
 	Yushan_DXO_DTFilter_Bypass();
 #endif
 
 #ifdef RAWCHIP_NORMAL_MODE
 	CDBG("[CAM] Yushan_common_init Yushan_Init_Dxo\n");
-	/* bBypassDxoUpload = 1; */
+	
 	bStatus = Yushan_Init_Dxo(&sDxoStruct, bBypassDxoUpload);
 	CDBG("[CAM] Yushan_common_init Yushan_Init_Dxo=%d\n", bStatus);
 	if (bStatus == SUCCESS) {
@@ -700,8 +679,7 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	CDBG("[CAM] Yushan_common_init Yushan_Get_Version_Information\n");
 
 	bStatus = Yushan_Get_Version_Information(&sYushanVersionInfo) ;
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF
+#if 1 
 	CDBG("Yushan_common_init Yushan_Get_Version_Information=%d\n", bStatus);
 
 	CDBG("API Version : %d.%d \n", sYushanVersionInfo.bApiMajorVersion, sYushanVersionInfo.bApiMinorVersion);
@@ -712,21 +690,19 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	CDBG("DxO Dpp Calibration Version : %x \n", sYushanVersionInfo.udwDppCalibrationVersion);
 	CDBG("DxO Dop Calibration Version : %x \n", sYushanVersionInfo.udwDopCalibrationVersion);
 #endif
-/* #endif */
 
 #if 0
-	/* For Test Pattern */
+	
 	if (bTestPatternMode == 1) {
-		/* Pattern Gen */
+		
 		Yushan_PatternGenerator(&sInitStruct, bPatternReq, bDxoBypassForTestPattern);
-		/* frame_counter(); */
+		
 		return 0;
 	}
 #endif
 
-	/* Updating DXO */
+	
 	Yushan_Update_ImageChar(&sImageChar_context);
-//	Yushan_Update_ImageChar(&sImageChar);
 	Yushan_Update_SensorParameters(&sGainsExpTime);
 	Yushan_Update_DxoDpp_TuningParameters(&sDxoDppTuning);
 	Yushan_Update_DxoDop_TuningParameters(&sDxoDopTuning);
@@ -734,23 +710,23 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 	bStatus = Yushan_Update_Commit(bPdpMode, bDppMode, bDopMode);
 	CDBG("[CAM] Yushan_common_init Yushan_Update_Commit=%d\n", bStatus);
 
-	/* Wait for the EndOfExec interrupts. This indicates the completion of the */
-	/* execution command */
-	bStatus &= Yushan_WaitForInterruptEvent(EVENT_PDP_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	
+	
+	bStatus &= Yushan_WaitForInterruptEvent(EVENT_PDP_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_PDP_EOF_EXECCMD fail\n");
 		return -1;
 	}
 
-	bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DOP7_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DOP7_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_DOP7_EOF_EXECCMD fail\n");
 		return -1;
 	}
 
-	bStatus &= Yushan_WaitForInterruptEvent(EVENT_DPP_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	bStatus &= Yushan_WaitForInterruptEvent(EVENT_DPP_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_DPP_EOF_EXECCMD fail\n");
@@ -761,12 +737,12 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 		CDBG("[CAM] DXO Commit Done\n");
 	else {
 		pr_err("[CAM] DXO Commit FAILED\n");
-		/* return -1; */
+		
 	}
 
 #endif
 #if 0
-	/* disable extra INT */
+	
 	bSpiData = 0;
 	SPI_Write(YUSHAN_SMIA_FM_EOF_INT_EN, 1,  &bSpiData);
 #endif
@@ -775,39 +751,36 @@ int Yushan_sensor_open_init(struct rawchip_sensor_init_data data)
 #endif
 	return 0;
 }
-/*********************************************************************
-Function to programm AF_ROI and Check the stats too
-**********************************************************************/
 bool_t Yushan_Dxo_Dop_Af_Run(Yushan_AF_ROI_t	*sYushanAfRoi, uint32_t *pAfStatsGreen, uint8_t	bRoiActiveNumber)
 {
 
 	uint8_t		bStatus = SUCCESS;
-	/* uint16_t	uwSpiData = 0; */
+	
 #if 1
 	uint32_t		enableIntrMask[] = {0x00338E30, 0x00000000, 0x00018000};
 	uint32_t		disableIntrMask[] = {0x00238E30, 0x00000000, 0x00018000};
 #endif
 
-	/* Recommended by DXO */
+	
 
-	/* pr_info("[CAM] Active Number of ROI is more than 0.\nUpdating the ROIs post streaming\n\n"); */
+	
 
 	if (bRoiActiveNumber)
 	{
 		Yushan_Intr_Enable((uint8_t*)enableIntrMask);
-		/* Program the AF_ROI */
+		
 		bStatus = Yushan_AF_ROI_Update(&sYushanAfRoi[0], bRoiActiveNumber);
 		bStatus &= Yushan_Update_Commit(bPdpMode,bDppMode,bDopMode);
 
-		/* Reading the AF Statistics */
-		bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DXODOP7_NEWFRAMEPROC_ACK, TIME_100MS/*TIME_20MS*/);
+		
+		bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DXODOP7_NEWFRAMEPROC_ACK, TIME_100MS);
 	}
 	else
 		Yushan_Intr_Enable((uint8_t*)disableIntrMask);
 
 #if 0
 	if (bStatus) {
-		/* pr_info("[CAM] Successufully DXO Commited and received EVENT_DXODOP7_NEWFRAMEPROC_ACK \n"); */
+		
 		#if 0
 		yushan_go_to_position(0, 0);
 		for(i=1; i<=42; i++)
@@ -838,35 +811,35 @@ bool_t Yushan_get_AFSU(Yushan_AF_Stats_t* sYushanAFStats)
 	uint32_t	udwSpiData[4];
 	uint16_t val ;
 
-#if 0//debug usage
+#if 0
 			YushanPrintFrameNumber();
 			YushanPrintDxODOPAfStrategy();
 			YushanPrintImageInformation();
 			YushanPrintVisibleLineSizeAndRoi();
 #endif
 
-	/* Read active number of ROI */
+	
 	bStatus &= SPI_Read(DXO_DOP_BASE_ADDR+DxODOP_ROI_active_number_7_0, 1, (uint8_t*)(&bNumOfActiveRoi));
 
-	if (!bNumOfActiveRoi) /* NO ROI ACTIVATED */
+	if (!bNumOfActiveRoi) 
 		return SUCCESS;
 
 	SPI_Read(DXO_DOP_BASE_ADDR+DxODOP_frame_number_7_0, 2, (uint8_t *)(&val));
 	sYushanAFStats[0].frameIdx= val;
 
-	/* bNumOfActiveRoi = 4; */
-	/* Program the active number of ROIs */
+	
+	
 	while(bCount<bNumOfActiveRoi)
 	{
-		/* Reading the stats from the DXO registers. */
+		
 		bStatus &= SPI_Read((uint16_t)(DXO_DOP_BASE_ADDR + DxODOP_ROI_0_stats_G_7_0 + bCount*16), 16, (uint8_t *)(&udwSpiData[0]));
-		/* Copying the stats to the AF Stats struct */
+		
 		sYushanAFStats[bCount].udwAfStatsGreen        = udwSpiData[0];
 		sYushanAFStats[bCount].udwAfStatsRed            = udwSpiData[1];
 		sYushanAFStats[bCount].udwAfStatsBlue           = udwSpiData[2];
 		sYushanAFStats[bCount].udwAfStatsConfidence = udwSpiData[3];
 		sYushanAFStats[bCount].frameIdx                    = sYushanAFStats[0].frameIdx;
-#if 0//debug usage
+#if 0
 		pr_info("[CAM]%s, G:%d, R:%d, B:%d, confidence:%d (%d) \n", __func__,
 			sYushanAFStats[bCount].udwAfStatsGreen,
 			sYushanAFStats[bCount].udwAfStatsRed,
@@ -903,24 +876,21 @@ int Yushan_get_AFSU(rawchip_af_stats* af_stats)
 #endif
 
 
-/*********************************************************************
-Function: Context Update Wrapper
-**********************************************************************/
 bool_t	Yushan_ContextUpdate_Wrapper(Yushan_New_Context_Config_t	sYushanNewContextConfig, Yushan_ImageChar_t	sImageNewChar_context)
 {
 
 	bool_t	bStatus = SUCCESS;
-	//Yushan_ImageChar_t	sImageChar_context;
+	
 
 		CDBG("[CAM] Reconfiguration starts:%d,%d,%d\n",
 			sYushanNewContextConfig.uwActiveFrameLength,
 			sYushanNewContextConfig.uwActivePixels,
 			sYushanNewContextConfig.uwLineBlank);
 		bStatus = Yushan_Context_Config_Update(&sYushanNewContextConfig);
-		/* sYushanAEContextConfig = (Yushan_New_Context_Config_t*)&sYushanNewContextConfig; */
+		
 
 #if 0
-	/* Now update the DXO */
+	
 	sImageChar_context.bImageOrientation = sYushanNewContextConfig->orientation;
 	sImageChar_context.uwXAddrStart = sYushanNewContextConfig->uwXAddrStart;
 	sImageChar_context.uwYAddrStart = sYushanNewContextConfig->uwYAddrStart;
@@ -935,27 +905,27 @@ bool_t	Yushan_ContextUpdate_Wrapper(Yushan_New_Context_Config_t	sYushanNewContex
 #endif
 
 
-	/* default enable DxO */
+	
 	Yushan_Update_ImageChar(&sImageNewChar_context);
 	bStatus &= Yushan_Update_Commit(bPdpMode,bDppMode,bDopMode);
 
-	/* Wait for the EndOfExec interrupts. This indicates the completion of the */
-	/* execution command */
-	bStatus &= Yushan_WaitForInterruptEvent(EVENT_PDP_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	
+	
+	bStatus &= Yushan_WaitForInterruptEvent(EVENT_PDP_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_PDP_EOF_EXECCMD fail\n");
 		return -1;
 	}
 
-	bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DOP7_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	bStatus &= Yushan_WaitForInterruptEvent2(EVENT_DOP7_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_DOP7_EOF_EXECCMD fail\n");
 		return -1;
 	}
 
-	bStatus &= Yushan_WaitForInterruptEvent(EVENT_DPP_EOF_EXECCMD, TIME_100MS/*TIME_10MS*/);
+	bStatus &= Yushan_WaitForInterruptEvent(EVENT_DPP_EOF_EXECCMD, TIME_100MS);
 	if (!bStatus)
 	{
 		pr_err("[CAM] EVENT_DPP_EOF_EXECCMD fail\n");
@@ -988,7 +958,7 @@ void Yushan_Write_Exp_Time_Gain(uint16_t yushan_line, uint16_t yushan_gain)
 	sGainsExpTime.uwPreDigGainGR= 0x100;
 	sGainsExpTime.uwPreDigGainR= 0x100;
 	sGainsExpTime.uwPreDigGainB= 0x100;
-	sGainsExpTime.uwExposureTime= (uint16_t)((19*yushan_line/1000));//((3280+190)*1000))/(float)182400000);//(sYushanAEContextConfig->uwActivePixels + sYushanAEContextConfig->uwPixelBlank) /182400000;//*200/912; ;
+	sGainsExpTime.uwExposureTime= (uint16_t)((19*yushan_line/1000));
 
 	if (sGainsExpTime.bRedGreenRatio == 0) sGainsExpTime.bRedGreenRatio=0x40;
 	if (sGainsExpTime.bBlueGreenRatio == 0) sGainsExpTime.bBlueGreenRatio=0x40;
@@ -1135,11 +1105,11 @@ void Yushan_dump_register(void)
 	uint16_t read_data = 0;
 	uint8_t i;
 	for (i = 0; i < 50; i++) {
-		/* Yushan's in counting */
+		
 		rawchip_spi_read_2B2B(YUSHAN_CSI2_RX_FRAME_NUMBER, &read_data);
 		pr_info("[CAM] Yushan's in counting=%d\n", read_data);
 
-		/* Yushan's out counting */
+		
 		rawchip_spi_read_2B2B(YUSHAN_CSI2_TX_FRAME_NO_0, &read_data);
 		pr_info("[CAM] Yushan's out counting=%d\n", read_data);
 
@@ -1161,11 +1131,11 @@ void Yushan_dump_all_register(void)
 	uint16_t read_data = 0;
 	uint8_t i;
 	for (i = 0; i < 50; i++) {
-		/* Yushan's in counting */
+		
 		rawchip_spi_read_2B2B(YUSHAN_CSI2_RX_FRAME_NUMBER, &read_data);
 		pr_info("[CAM] Yushan's in counting=%d\n", read_data);
 
-		/* Yushan's out counting */
+		
 		rawchip_spi_read_2B2B(YUSHAN_CSI2_TX_FRAME_NO_0, &read_data);
 		pr_info("[CAM] Yushan's out counting=%d\n", read_data);
 
@@ -1978,7 +1948,7 @@ void Yushan_dump_Dxo(void)
 	CDBG("[CAM] %s: **** DXO DPP CODE/CLIB CHECK ****\n", __func__);
 	udwSpiBaseIndex = 0x010000;
 	SPI_Write(YUSHAN_HOST_IF_SPI_BASE_ADDRESS, 4, (uint8_t *)(&udwSpiBaseIndex));
-	udwDxoBaseAddress=(0x8000 + DXO_DPP_BASE_ADDR) - udwSpiBaseIndex; /* OR ## DXO_DPP_BASE_ADDR-0x8000; */
+	udwDxoBaseAddress=(0x8000 + DXO_DPP_BASE_ADDR) - udwSpiBaseIndex; 
 	for (i = 0; i < p_yushan_regs->dppcode_size; i++) {
 		YUSHAN_DPP_REGISTER_CHECK(p_yushan_regs->dppcode_first_addr+udwDxoBaseAddress+i-DXO_DPP_BASE_ADDR+0x8000);
 		target_data = *((uint8_t *)p_yushan_regs->dppcode+i);
@@ -1988,9 +1958,9 @@ void Yushan_dump_Dxo(void)
 			print_data++;
 		}
 	}
-	udwSpiBaseIndex = DXO_DPP_BASE_ADDR + p_yushan_regs->dppclib_first_addr; /* 0x018000; */
+	udwSpiBaseIndex = DXO_DPP_BASE_ADDR + p_yushan_regs->dppclib_first_addr; 
 	SPI_Write(YUSHAN_HOST_IF_SPI_BASE_ADDRESS, 4, (uint8_t *)(&udwSpiBaseIndex));
-	udwDxoBaseAddress = ((DXO_DPP_BASE_ADDR + p_yushan_regs->dppclib_first_addr) - udwSpiBaseIndex) + 0x8000; /*(0x8000 + DXO_DPP_BASE_ADDR) - udwSpiBaseIndex;*/
+	udwDxoBaseAddress = ((DXO_DPP_BASE_ADDR + p_yushan_regs->dppclib_first_addr) - udwSpiBaseIndex) + 0x8000; 
 	for (i = 0; i < p_yushan_regs->dppclib_size; i++) {
 		YUSHAN_DPP_REGISTER_CHECK(udwDxoBaseAddress+i-DXO_DPP_BASE_ADDR+0x8000);
 		target_data = *((uint8_t *)p_yushan_regs->dppclib+i);

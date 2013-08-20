@@ -26,7 +26,6 @@
 #include <linux/usb/gadget.h>
 #include <linux/workqueue.h>
 
-/*#define HTC_DIAG_DEBUG*/
 #include <linux/debugfs.h>
 #if DIAG_XPST
 #include <mach/sdio_al.h>
@@ -55,12 +54,6 @@ static void fdiag_debugfs_init(void);
 #define USB_DIAG_NV_7KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 2, uint16_t *)
 #define USB_DIAG_NV_9KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 3, uint16_t *)
 #define USB_DIAG_NV_7K9KDIFF_SET _IOW(USB_DIAG_IOC_MAGIC, 4, uint16_t *)
-/*
-#define USB_DIAG_RC9_7K9K_SET _IOW(USB_DIAG_IOC_MAGIC, 5, uint16_t *)
-#define USB_DIAG_RC9_7KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 6, uint16_t *)
-#define USB_DIAG_RC9_9KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 7, uint16_t *)
-#define USB_DIAG_RC9_7K9KDIFF_SET _IOW(USB_DIAG_IOC_MAGIC, 8, uint16_t *)
-*/
 #define USB_DIAG_PRL_7K9K_SET _IOW(USB_DIAG_IOC_MAGIC, 9, uint16_t *)
 #define USB_DIAG_PRL_7KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 10, uint16_t *)
 #define USB_DIAG_PRL_9KONLY_SET _IOW(USB_DIAG_IOC_MAGIC, 11, uint16_t *)
@@ -165,23 +158,6 @@ static struct usb_descriptor_header *hs_diag_desc[] = {
 	NULL,
 };
 
-/**
- * struct diag_context - USB diag function driver private structure
- * @function: function structure for USB interface
- * @out: USB OUT endpoint struct
- * @in: USB IN endpoint struct
- * @in_desc: USB IN endpoint descriptor struct
- * @out_desc: USB OUT endpoint descriptor struct
- * @read_pool: List of requests used for Rx (OUT ep)
- * @write_pool: List of requests used for Tx (IN ep)
- * @config_work: Work item schedule after interface is configured to notify
- *               CONNECT event to diag char driver and updating product id
- *               and serial number to MODEM/IMEM.
- * @lock: Spinlock to proctect read_pool, write_pool lists
- * @cdev: USB composite device struct
- * @ch: USB diag channel
- *
- */
 struct diag_context {
 	struct usb_function function;
 	struct usb_ep *out;
@@ -195,7 +171,7 @@ struct diag_context {
 	int (*update_pid_and_serial_num)(uint32_t, const char *);
 	struct usb_diag_ch ch;
 
-	/* pkt counters */
+	
 	unsigned long dpkts_tolaptop;
 	unsigned long dpkts_tomodem;
 	unsigned dpkts_tolaptop_pending;
@@ -203,7 +179,7 @@ struct diag_context {
 	spinlock_t req_lock;
 
 	struct mutex user_lock;
-#define ID_TABLE_SZ 20 /* keep this small */
+#define ID_TABLE_SZ 20 
 	struct list_head rx_req_idle;
 	struct list_head rx_req_user;
 	wait_queue_head_t read_wq;
@@ -211,13 +187,12 @@ struct diag_context {
 	uint32_t user_read_len;
 	char *user_readp;
 	bool opened;
-	/* list of registered command ids to be routed to userspace */
+	
 	unsigned char id_table[ID_TABLE_SZ];
 
-	/* smd_channel_t *ch; */
+	
 	int online;
 	int error;
-/* for slate test */
 	struct list_head rx_arm9_idle;
 	struct list_head rx_arm9_done;
 	struct mutex diag2arm9_lock;
@@ -230,10 +205,10 @@ struct diag_context {
 	unsigned char *read_arm9_buf;
 	wait_queue_head_t read_arm9_wq;
 	struct usb_request *read_arm9_req;
-	u64 tx_count; /* to smd */
-	u64 rx_count; /* from smd */
-	u64 usb_in_count; /* to pc */
-	u64 usb_out_count; /* from pc */
+	u64 tx_count; 
+	u64 rx_count; 
+	u64 usb_in_count; 
+	u64 usb_out_count; 
 	int ready;
 #endif
 };
@@ -264,18 +239,13 @@ static void usb_config_work_func(struct work_struct *work)
 	if (!ctxt->update_pid_and_serial_num)
 		return;
 
-	/* pass on product id and serial number to dload */
+	
 	if (!cdev->desc.iSerialNumber) {
 		ctxt->update_pid_and_serial_num(
 					cdev->desc.idProduct, 0);
 		return;
 	}
 
-	/*
-	 * Serial number is filled by the composite driver. So
-	 * it is fair enough to assume that it will always be
-	 * found at first table of strings.
-	 */
 	table = *(cdev->driver->strings);
 	for (s = table->strings; s && s->s; s++)
 		if (s->id == cdev->desc.iSerialNumber) {
@@ -301,7 +271,7 @@ static void diag_write_complete(struct usb_ep *ep,
 			req->length = 0;
 			d_req->actual = req->actual;
 			d_req->status = req->status;
-			/* Queue zero length packet */
+			
 			usb_ep_queue(ctxt->in, req, GFP_ATOMIC);
 			return;
 		}
@@ -368,17 +338,6 @@ static void diag_read_complete(struct usb_ep *ep,
 		ctxt->ch.notify(ctxt->ch.priv, USB_DIAG_READ_DONE, d_req);
 }
 
-/**
- * usb_diag_open() - Open a diag channel over USB
- * @name: Name of the channel
- * @priv: Private structure pointer which will be passed in notify()
- * @notify: Callback function to receive notifications
- *
- * This function iterates overs the available channels and returns
- * the channel handler if the name matches. The notify callback is called
- * for CONNECT, DISCONNECT, READ_DONE and WRITE_DONE events.
- *
- */
 struct usb_diag_ch *usb_diag_open(const char *name, void *priv,
 		void (*notify)(void *, unsigned, struct diag_request *))
 {
@@ -392,7 +351,7 @@ struct usb_diag_ch *usb_diag_open(const char *name, void *priv,
 
 	printk(KERN_DEBUG "[USB] %s: name: %s\n", __func__, name);
 	spin_lock_irqsave(&ch_lock, flags);
-	/* Check if we already have a channel with this name */
+	
 	list_for_each_entry(ch, &usb_diag_ch_list, list) {
 		if (!strcmp(name, ch->name)) {
 			found = 1;
@@ -402,7 +361,7 @@ struct usb_diag_ch *usb_diag_open(const char *name, void *priv,
 	spin_unlock_irqrestore(&ch_lock, flags);
 
 	if (!found) {
-		/* have a static global variable already */
+		
 		if (!strcmp(name, DIAG_LEGACY)) {
 			legacyctxt = ctxt = &_context;
 			legacych = ch = &legacyctxt->ch;
@@ -414,7 +373,7 @@ struct usb_diag_ch *usb_diag_open(const char *name, void *priv,
 #if DIAG_XPST
 		if (!xpst_initialized) {
 			misc_register(&htc_diag_device_fops);
-			/*DMrounter*/
+			
 			misc_register(&diag2arm9_device);
 			ctxt->usb_in_count = ctxt->usb_out_count = 0;
 			ctxt->tx_count = ctxt->rx_count = 0;
@@ -435,13 +394,6 @@ struct usb_diag_ch *usb_diag_open(const char *name, void *priv,
 }
 EXPORT_SYMBOL(usb_diag_open);
 
-/**
- * usb_diag_close() - Close a diag channel over USB
- * @ch: Channel handler
- *
- * This function closes the diag channel.
- *
- */
 void usb_diag_close(struct usb_diag_ch *ch)
 {
 	struct diag_context *dev = container_of(ch, struct diag_context, ch);
@@ -450,7 +402,7 @@ void usb_diag_close(struct usb_diag_ch *ch)
 	spin_lock_irqsave(&ch_lock, flags);
 	ch->priv = NULL;
 	ch->notify = NULL;
-	/* Free-up the resources if channel is no more active */
+	
 	if (!ch->priv_usb) {
 		list_del(&ch->list);
 		kfree(dev);
@@ -460,14 +412,6 @@ void usb_diag_close(struct usb_diag_ch *ch)
 }
 EXPORT_SYMBOL(usb_diag_close);
 
-/**
- * usb_diag_free_req() - Free USB requests
- * @ch: Channel handler
- *
- * This function free read and write USB requests for the interface
- * associated with this channel.
- *
- */
 void usb_diag_free_req(struct usb_diag_ch *ch)
 {
 	struct diag_context *ctxt = ch->priv_usb;
@@ -491,17 +435,6 @@ void usb_diag_free_req(struct usb_diag_ch *ch)
 }
 EXPORT_SYMBOL(usb_diag_free_req);
 
-/**
- * usb_diag_alloc_req() - Allocate USB requests
- * @ch: Channel handler
- * @n_write: Number of requests for Tx
- * @n_read: Number of requests for Rx
- *
- * This function allocate read and write USB requests for the interface
- * associated with this channel. The actual buffer is not allocated.
- * The buffer is passed by diag char driver.
- *
- */
 int usb_diag_alloc_req(struct usb_diag_ch *ch, int n_write, int n_read)
 {
 	struct diag_context *ctxt = ch->priv_usb;
@@ -536,19 +469,6 @@ fail:
 }
 EXPORT_SYMBOL(usb_diag_alloc_req);
 
-/**
- * usb_diag_read() - Read data from USB diag channel
- * @ch: Channel handler
- * @d_req: Diag request struct
- *
- * Enqueue a request on OUT endpoint of the interface corresponding to this
- * channel. This function returns proper error code when interface is not
- * in configured state, no Rx requests available and ep queue is failed.
- *
- * This function operates asynchronously. READ_DONE event is notified after
- * completion of OUT request.
- *
- */
 int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 {
 	struct diag_context *ctxt = ch->priv_usb;
@@ -579,7 +499,7 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 	req->length = d_req->length;
 	req->context = d_req;
 	if (usb_ep_queue(ctxt->out, req, GFP_ATOMIC)) {
-		/* If error add the link to linked list again*/
+		
 		spin_lock_irqsave(&ctxt->lock, flags);
 		list_add_tail(&req->list, &ctxt->read_pool);
 		spin_unlock_irqrestore(&ctxt->lock, flags);
@@ -592,19 +512,6 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 }
 EXPORT_SYMBOL(usb_diag_read);
 
-/**
- * usb_diag_write() - Write data from USB diag channel
- * @ch: Channel handler
- * @d_req: Diag request struct
- *
- * Enqueue a request on IN endpoint of the interface corresponding to this
- * channel. This function returns proper error code when interface is not
- * in configured state, no Tx requests available and ep queue is failed.
- *
- * This function operates asynchronously. WRITE_DONE event is notified after
- * completion of IN request.
- *
- */
 int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 {
 	struct diag_context *ctxt = ch->priv_usb;
@@ -635,7 +542,7 @@ int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 	req->length = d_req->length;
 	req->context = d_req;
 	if (usb_ep_queue(ctxt->in, req, GFP_ATOMIC)) {
-		/* If error add the link to linked list again*/
+		
 		spin_lock_irqsave(&ctxt->lock, flags);
 		list_add_tail(&req->list, &ctxt->write_pool);
 		spin_unlock_irqrestore(&ctxt->lock, flags);
@@ -768,7 +675,7 @@ static int diag_function_bind(struct usb_configuration *c,
 	ctxt->out = ep;
 	ep->driver_data = ctxt;
 
-	/* copy descriptors, and track endpoint copies */
+	
 	f->descriptors = usb_copy_descriptors(fs_diag_desc);
 	if (!f->descriptors)
 		goto fail;
@@ -779,7 +686,7 @@ static int diag_function_bind(struct usb_configuration *c,
 		hs_bulk_out_desc.bEndpointAddress =
 				fs_bulk_out_desc.bEndpointAddress;
 
-		/* copy descriptors, and track endpoint copies */
+		
 		f->hs_descriptors = usb_copy_descriptors(hs_diag_desc);
 	}
 	return 0;
@@ -795,11 +702,11 @@ fail:
 static struct usb_string diag_string_defs[] = {
 	[0].s = "HTC DIAG",
 	[1].s = "HTC 9K DIAG",
-	{  } /* end of list */
+	{  } 
 };
 
 static struct usb_gadget_strings diag_string_table = {
-	.language =		0x0409,	/* en-us */
+	.language =		0x0409,	
 	.strings =		diag_string_defs,
 };
 
@@ -829,7 +736,7 @@ int diag_function_add(struct usb_configuration *c, const char *name,
 	}
 
 	dev = container_of(_ch, struct diag_context, ch);
-	/* claim the channel for this USB interface */
+	
 	_ch->priv_usb = dev;
 
 	dev->update_pid_and_serial_num = update_pid;
@@ -966,7 +873,7 @@ static void diag_cleanup(void)
 		dev = container_of(_ch, struct diag_context, ch);
 
 		spin_lock_irqsave(&ch_lock, flags);
-		/* Free if diagchar is not using the channel anymore */
+		
 		if (!_ch->priv) {
 			list_del(&_ch->list);
 			kfree(dev);

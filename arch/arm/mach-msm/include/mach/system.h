@@ -22,13 +22,10 @@ void arch_reset(char mode, const char *cmd);
 #else
 static inline void arch_reset(char mode, const char *cmd)
 {
-	for (;;) ;  /* depends on IPC w/ other core */
+	for (;;) ;  
 }
 #endif
 
-/* low level hardware reset hook -- for example, hitting the
- * PSHOLD line on the PMIC to hard reset the system
- */
 extern void (*msm_hw_reset_hook)(void);
 
 void msm_set_i2c_mux(bool gpio, int *gpio_clk, int *gpio_dat);

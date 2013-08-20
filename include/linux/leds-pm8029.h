@@ -30,7 +30,6 @@ enum pmic8029_leds {
 	PMIC8029_GPIO6,
 	PMIC8029_GPIO8,
 };
-/*LED blink mode for modem*/
 #define BLINK_DISABLE		0
 #define BLINK_64MS_PER_2S	1
 #define BLINK_1S_PER_2S		2
@@ -70,4 +69,4 @@ struct pm8029_led_data {
 	uint32_t flag;
 };
 
-#endif /* _LINUX_LEDS_PM8029_H */
+#endif 

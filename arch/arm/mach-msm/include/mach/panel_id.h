@@ -18,13 +18,6 @@
 
 extern int panel_type;
 
-/* BIT0 - BIT15 : panel id */
-/* BIT16 - BIT18 : backlight interface */
-/* BIT19- BIT21 : display interface */
-/* BIT22- BIT24 : color depth */
-/* BIT25- BIT27 : lcm revision */
-/* BIT28- BIT29 : mipi control mode */
-/* BIT30- BIT31 : reserved */
 
 #define BL_SHIFT        16
 #define BL_MASK         (0x7 << BL_SHIFT)
@@ -160,10 +153,11 @@ extern int panel_type;
 #define PANEL_ID_PROTODCG_LG    (0x5E | BL_MIPI | IF_MIPI | DEPTH_RGB888 | MIPI_VIDEO_ONLY)
 #define PANEL_ID_PROTODCG_SHARP (0x5F | BL_MIPI | IF_MIPI | DEPTH_RGB888 | MIPI_VIDEO_ONLY)
 #define PANEL_ID_PROTODCG_SHARP_C1 (0x5F | BL_MIPI | IF_MIPI | DEPTH_RGB888 | REV_1 | MIPI_VIDEO_ONLY)
-#define PANEL_ID_MAGNIDS_LG    (0x5C | BL_MIPI | IF_MIPI | DEPTH_RGB888 | MIPI_VIDEO_ONLY)
-#define PANEL_ID_MAGNIDS_SHARP (0x5D | BL_MIPI | IF_MIPI | DEPTH_RGB888 | MIPI_VIDEO_ONLY)
-#define PANEL_ID_MAGNIDS_SHARP_C1 (0x5D | BL_MIPI | IF_MIPI | DEPTH_RGB888 | REV_1 | MIPI_VIDEO_ONLY)
+#define PANEL_ID_MAGNIDS_SHARP    (0x61 | BL_SPI | IF_LCDC | DEPTH_RGB888)
+#define PANEL_ID_MAGNIDS_AUO    (0x62 | BL_SPI | IF_LCDC | DEPTH_RGB888)
+#define PANEL_ID_PROTODCG_SONY (0x67 | BL_MIPI | IF_MIPI | DEPTH_RGB888)
+#define PANEL_ID_URANUS_SONY_ORISE (0x73 | BL_MIPI | IF_MIPI | DEPTH_RGB888)
+#define PANEL_ID_URANUS_LG_NOVATEK (0x75 | BL_MIPI | IF_MIPI | DEPTH_RGB888 | MIPI_VIDEO_ONLY)
 #define PANEL_ID_END            0xFFFF
 
-#endif	/* __PANEL_ID_H */
-
+#endif	

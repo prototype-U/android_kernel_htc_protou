@@ -27,58 +27,24 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 *====*====*====*====*====*====*====*====*====*====*====*====*====*====*====*/
-/*===========================================================================
 
-                      EDIT HISTORY FOR FILE
 
-This section contains comments describing changes made to this file.
-Notice that changes are listed in reverse chronological order.
-   
-$Header: //source/qcom/qct/multimedia2/Audio/drivers/QDSP5Driver/QDSP5Interface/main/latest/qdsp5audppcmdi.h#2 $   
-  
-===========================================================================*/
 
-/*
- * ARM to AUDPPTASK Commands 
- *
- * ARM uses three command queues to communicate with AUDPPTASK
- * 1)uPAudPPCmd1Queue : Used for more frequent and shorter length commands
- * 	Location : MEMA
- * 	Buffer Size : 6 words
- * 	No of buffers in a queue : 20 for gaming audio and 5 for other images
- * 2)uPAudPPCmd2Queue : Used for commands which are not much lengthier
- * 	Location : MEMA
- * 	Buffer Size : 23
- * 	No of buffers in a queue : 2
- * 3)uPAudOOCmd3Queue : Used for lengthier and more frequent commands
- * 	Location : MEMA
- * 	Buffer Size : 145
- * 	No of buffers in a queue : 3
- */
-
-/*
- * Commands Related to uPAudPPCmd1Queue
- */
-
-/*
- * Command Structure to enable or disable the active decoders 
- */
 
 #define AUDPP_CMD_CFG_DEC_TYPE 		0x0001
 #define AUDPP_CMD_CFG_DEC_TYPE_LEN 	sizeof(audpp_cmd_cfg_dec_type)
 
-/* Enable the decoder */
 #define AUDPP_CMD_DEC_TYPE_M           	0x000F
 
 #define AUDPP_CMD_ENA_DEC_V         	0x4000
 #define AUDPP_CMD_DIS_DEC_V        	0x0000
 #define AUDPP_CMD_DEC_STATE_M          	0x4000
+#define AUDPP_CMD_LPA_MODE		0x2000
 
 #define AUDPP_CMD_UPDATDE_CFG_DEC	0x8000
 #define AUDPP_CMD_DONT_UPDATE_CFG_DEC	0x0000
 
 
-/* Type specification of cmd_cfg_dec */
  
 typedef struct {
   unsigned short cmd_id;
@@ -89,14 +55,10 @@ typedef struct {
   unsigned short dec4_cfg;
 } __attribute__((packed)) audpp_cmd_cfg_dec_type;
 
-/*
- * Command Structure to Pause , Resume and flushes the selected audio decoders
- */
 
 #define AUDPP_CMD_DEC_CTRL		0x0002
 #define AUDPP_CMD_DEC_CTRL_LEN		sizeof(audpp_cmd_dec_ctrl)
 
-/* Decoder control commands for pause, resume and flush */
 #define AUDPP_CMD_FLUSH_V         		0x2000
 
 #define AUDPP_CMD_PAUSE_V		        0x4000
@@ -106,7 +68,6 @@ typedef struct {
 #define AUDPP_CMD_IGNORE_V		        0x0000
 
 
-/* Type Spec for decoder control command*/
 
 typedef struct {
   unsigned short cmd_id;
@@ -117,9 +78,6 @@ typedef struct {
   unsigned short dec4_ctrl;
 } __attribute__((packed)) audpp_cmd_dec_ctrl;
 
-/*
- * Command Structure to Configure the AVSync FeedBack Mechanism
- */
 
 #define AUDPP_CMD_AVSYNC	0x0003
 #define AUDPP_CMD_AVSYNC_LEN	sizeof(audpp_cmd_avsync)
@@ -131,9 +89,6 @@ typedef struct {
 	unsigned short interrupt_interval_msw;
 } __attribute__((packed)) audpp_cmd_avsync;
 
-/*
- * Command Structure to enable or disable(sleep) the   AUDPPTASK 
- */
 
 #define AUDPP_CMD_CFG	0x0004
 #define AUDPP_CMD_CFG_LEN	sizeof(audpp_cmd_cfg)
@@ -146,9 +101,6 @@ typedef struct {
   unsigned short cfg;
 } __attribute__((packed)) audpp_cmd_cfg;
 
-/*
- * Command Structure to Inject or drop the specified no of samples
- */
 
 #define AUDPP_CMD_ADJUST_SAMP		0x0005
 #define AUDPP_CMD_ADJUST_SAMP_LEN	sizeof(audpp_cmd_adjust_samp)
@@ -165,9 +117,6 @@ typedef struct {
 	unsigned short num_samples;
 } __attribute__((packed)) audpp_cmd_adjust_samp;
 
-/*
- * Command Structure to Configure AVSync Feedback Mechanism
- */
 
 #define AUDPP_CMD_AVSYNC_CMD_2		0x0006
 #define AUDPP_CMD_AVSYNC_CMD_2_LEN	sizeof(audpp_cmd_avsync_cmd_2)
@@ -185,9 +134,6 @@ typedef struct {
 	unsigned short byte_counter_msw;
 } __attribute__((packed)) audpp_cmd_avsync_cmd_2;
 
-/*
- * Command Structure to Configure AVSync Feedback Mechanism
- */
 
 #define AUDPP_CMD_AVSYNC_CMD_3		0x0007
 #define AUDPP_CMD_AVSYNC_CMD_3_LEN	sizeof(audpp_cmd_avsync_cmd_3)
@@ -215,13 +161,7 @@ struct audpp_cmd_routing_mode {
   unsigned short routing_mode;
 } __attribute__((packed));
 
-/*
- * Commands Related to uPAudPPCmd2Queue
- */
 
-/*
- * Command Structure to configure Per decoder Parameters (Common)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS 		0x0000
 #define AUDPP_CMD_CFG_ADEC_PARAMS_COMMON_LEN	\
@@ -233,7 +173,6 @@ struct audpp_cmd_routing_mode {
 #define AUDPP_CMD_STATUS_MSG_FLAG_ENA_DCM	0x8000
 #define AUDPP_CMD_STATUS_MSG_FLAG_DIS_DCM	0x0000
 
-/* Sampling frequency*/
 #define  AUDPP_CMD_SAMP_RATE_96000 	0x0000
 #define  AUDPP_CMD_SAMP_RATE_88200 	0x0001
 #define  AUDPP_CMD_SAMP_RATE_64000 	0x0002
@@ -248,9 +187,6 @@ struct audpp_cmd_routing_mode {
 #define  AUDPP_CMD_SAMP_RATE_8000  	0x000B
 
 
-/* 
- * Type specification of cmd_adec_cfg sent to all decoder
- */
 
 typedef struct {
   unsigned short cmd_id;
@@ -261,9 +197,6 @@ typedef struct {
   unsigned short  input_sampling_frequency;
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_common;
 
-/*
- * Command Structure to configure Per decoder Parameters (Wav)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_WAV_LEN	\
 	sizeof(audpp_cmd_cfg_adec_params_wav)
@@ -283,9 +216,6 @@ typedef struct {
 	unsigned short 					sign;
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_wav;
 
-/*
- * Command Structure to configure Per decoder Parameters (ADPCM)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_ADPCM_LEN	\
 	sizeof(audpp_cmd_cfg_adec_params_adpcm)
@@ -300,9 +230,6 @@ typedef struct {
 	unsigned short 					block_size;
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_adpcm;
 
-/*
- * Command Structure to configure Per decoder Parameters (WMA)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_WMA_LEN	\
 	sizeof(struct audpp_cmd_cfg_adec_params_wma)
@@ -316,9 +243,6 @@ struct audpp_cmd_cfg_adec_params_wma {
 	unsigned short	wmaencoderopts;
 } __attribute__((packed));
 
-/*
- * Command Structure to configure Per decoder Parameters (WMAPRO)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_WMAPRO_LEN	\
 	sizeof(struct audpp_cmd_cfg_adec_params_wmapro)
@@ -338,9 +262,6 @@ struct audpp_cmd_cfg_adec_params_wmapro {
 	uint32_t	advancedencodeopt2;
 } __attribute__((packed));
 
-/*
- * Command Structure to configure Per decoder Parameters (MP3)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_MP3_LEN	\
 	sizeof(audpp_cmd_cfg_adec_params_mp3)
@@ -350,9 +271,6 @@ typedef struct {
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_mp3;
 
 
-/*
- * Command Structure to configure Per decoder Parameters (AAC)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_AAC_LEN	\
 	sizeof(audpp_cmd_cfg_adec_params_aac)
@@ -386,9 +304,6 @@ typedef struct {
   unsigned short                        channel_configuration;
 } __attribute__((packed)) audpp_cmd_cfg_adec_params_aac;
 
-/*
- * Command Structure to configure Per decoder Parameters (V13K)
- */
 
 #define AUDPP_CMD_CFG_ADEC_PARAMS_V13K_LEN	\
 	sizeof(struct audpp_cmd_cfg_adec_params_v13k)
@@ -410,9 +325,7 @@ struct audpp_cmd_cfg_adec_params_evrc {
 	unsigned short stereo_cfg;
 } __attribute__ ((packed));
 
-/*
- * Command Structure to configure Per decoder Parameters (AMRWB)
- */
+#define ADEC_PARAMS_AC3_INDEX 14
 
 struct audpp_cmd_cfg_adec_params_amrwb {
 	   audpp_cmd_cfg_adec_params_common     common;
@@ -422,9 +335,15 @@ struct audpp_cmd_cfg_adec_params_amrwb {
 #define AUDPP_CMD_CFG_ADEC_PARAMS_AMRWB_LEN \
 	sizeof(struct audpp_cmd_cfg_adec_params_amrwb)
 
-/*
- * Command Structure to configure the  HOST PCM interface
- */
+
+struct audpp_cmd_cfg_adec_params_ac3 {
+	audpp_cmd_cfg_adec_params_common	common;
+	unsigned short				index[ADEC_PARAMS_AC3_INDEX];
+} __packed;
+
+#define AUDPP_CMD_CFG_ADEC_PARAMS_AC3_LEN \
+	sizeof(struct audpp_cmd_cfg_adec_params_ac3)
+
 
 #define AUDPP_CMD_PCM_INTF	0x0001
 #define AUDPP_CMD_PCM_INTF_2	0x0002
@@ -433,8 +352,6 @@ struct audpp_cmd_cfg_adec_params_amrwb {
 #define AUDPP_CMD_PCM_INTF_MONO_V		        0x0001
 #define AUDPP_CMD_PCM_INTF_STEREO_V         	0x0002
 
-/* These two values differentiate the two types of commands that could be issued
- * Interface configuration command and Buffer update command */
 
 #define AUDPP_CMD_PCM_INTF_CONFIG_CMD_V	       	0x0000
 #define AUDPP_CMD_PCM_INTF_BUFFER_CMD_V	        -1
@@ -443,8 +360,6 @@ struct audpp_cmd_cfg_adec_params_amrwb {
 #define AUDPP_CMD_PCM_INTF_RX_ENA_ARMTODSP_V     0x0008
 #define AUDPP_CMD_PCM_INTF_RX_ENA_DSPTOARM_V     0x0004
 
-/* These flags control the enabling and disabling of the interface together
- *  with host interface bit mask. */
 
 #define AUDPP_CMD_PCM_INTF_ENA_V            -1
 #define AUDPP_CMD_PCM_INTF_DIS_V            0x0000
@@ -464,7 +379,7 @@ typedef struct {
   signed short  config;
   unsigned short  intf_type;
   
-  /* DSP -> ARM Configuration */
+  
   unsigned short  read_buf1LSW;
   unsigned short  read_buf1MSW;
   unsigned short  read_buf1_len;
@@ -472,13 +387,10 @@ typedef struct {
   unsigned short  read_buf2LSW;
   unsigned short  read_buf2MSW;
   unsigned short  read_buf2_len;
-  /*   0:HOST_PCM_INTF disable
-   **  0xFFFF: HOST_PCM_INTF enable
-   */
   signed short  dsp_to_arm_flag;
   unsigned short  partition_number;
 
-  /* ARM -> DSP Configuration */
+  
   unsigned short  write_buf1LSW;
   unsigned short  write_buf1MSW;
   unsigned short  write_buf1_len;
@@ -487,9 +399,6 @@ typedef struct {
   unsigned short  write_buf2MSW;
   unsigned short  write_buf2_len;
 
-  /*   0:HOST_PCM_INTF disable
-   **  0xFFFF: HOST_PCM_INTF enable
-   */
   signed short  arm_to_rx_flag;
   unsigned short  weight_decoder_to_rx;
   unsigned short  weight_arm_to_rx;
@@ -499,16 +408,13 @@ typedef struct {
   unsigned short  channel_mode;
 } __attribute__((packed)) audpp_cmd_pcm_intf;
 
-/*
- **  BUFFER UPDATE COMMAND
- */
 #define AUDPP_CMD_PCM_INTF_SEND_BUF_PARAMS_LEN	\
 	sizeof(audpp_cmd_pcm_intf_send_buffer)
 
 typedef struct {
   unsigned short  cmd_id;
   unsigned short  host_pcm_object;
-  /* set config = 0xFFFF for configuration*/
+  
   signed short  config;
   unsigned short  intf_type;
   unsigned short  dsp_to_arm_buf_id;
@@ -516,14 +422,20 @@ typedef struct {
   unsigned short  arm_to_dsp_buf_len;
 } __attribute__((packed)) audpp_cmd_pcm_intf_send_buffer;
 
+#define AUDPP_CMD_PP_FEAT_QUERY_PARAMS  0x0003
 
-/*
- * Commands Related to uPAudPPCmd3Queue
- */
+struct rtc_audpp_read_data {
+	unsigned short  cmd_id;
+	unsigned short  obj_id;
+	unsigned short  feature_id;
+	unsigned short  extbufsizemsw;
+	unsigned short  extbufsizelsw;
+	unsigned short	extpart;
+	unsigned short	extbufstartmsw;
+	unsigned short	extbufstartlsw;
+} __packed ;
 
-/*
- * Command Structure to configure post processing params (Commmon)
- */
+
 
 #define AUDPP_CMD_CFG_OBJECT_PARAMS		0x0000
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_COMMON_LEN		\
@@ -550,6 +462,8 @@ typedef struct {
 #define AUDPP_CMD_COMMON_CFG_UPDATE		0x8000
 #define AUDPP_CMD_COMMON_CFG_DONT_UPDATE	0x0000
 
+#define AUDPP_CMD_COPP_STREAM   0x0006
+
 typedef struct {
 	unsigned short  cmd_id;
 	unsigned short	obj0_cfg;
@@ -562,10 +476,8 @@ typedef struct {
 	unsigned short  command_type;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_common;
 
-/*
- * Command Structure to configure post processing params (Volume)
- */
 
+#define AUDPP_CMD_VOLUME_PAN		0
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_VOLUME_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_volume)
 
@@ -575,9 +487,6 @@ typedef struct {
 	unsigned short					pan;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_volume;
 
-/*
- * Command Structure to configure post processing params (PCM Filter) --DOUBT
- */
 
 typedef struct {
 	unsigned short			numerator_b0_filter_lsw;
@@ -631,6 +540,7 @@ typedef struct {
 		pan			pan_filter[4];
 } __attribute__((packed)) filter_4;
 
+#define AUDPP_CMD_IIR_TUNING_FILTER	1
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_PCM_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_pcm)
 
@@ -648,10 +558,8 @@ typedef struct {
 } __attribute__((packed)) audpp_cmd_cfg_object_params_pcm;
 
 
-/*
- * Command Structure to configure post processing parameters (equalizer) 
- */
 
+#define AUDPP_CMD_EQUALIZER		2
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_EQALIZER_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_eqalizer)
 
@@ -769,10 +677,8 @@ typedef struct {
 } __attribute__((packed)) audpp_cmd_cfg_object_params_eqalizer;
 
 
-/*
- * Command Structure to configure post processing parameters (ADRC) 
- */
 
+#define AUDPP_CMD_ADRC			3
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_ADRC_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_adrc)
 
@@ -780,6 +686,7 @@ typedef struct {
 #define AUDPP_CMD_ADRC_FLAG_DIS		0x0000
 #define AUDPP_CMD_ADRC_FLAG_ENA		-1
 
+#define AUDPP_CMD_MBADRC		10
 #define	AUDPP_MAX_MBADRC_BANDS		5
 #define	AUDPP_MBADRC_EXTERNAL_BUF_SIZE	196
 
@@ -821,10 +728,8 @@ struct audpp_cmd_cfg_object_params_adrc {
 	unsigned short	adrc_delay;
 };
 
-/*
- * Command Structure to configure post processing parameters(Spectrum Analizer)
- */
 
+#define AUDPP_CMD_SPECTROGRAM		4
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_SPECTRAM_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_spectram)
 
@@ -835,10 +740,8 @@ typedef struct {
 	unsigned short				num_coeff;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_spectram;
 
-/*
- * Command Structure to configure post processing parameters (QConcert) 
- */
 
+#define AUDPP_CMD_QCONCERT		5
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_QCONCERT_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_qconcert)
 
@@ -881,10 +784,8 @@ typedef struct {
 	unsigned short                          delay_buff_start_lsw;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_qconcert;
 
-/*
- * Command Structure to configure post processing parameters (Side Chain) 
- */
 
+#define AUDPP_CMD_SIDECHAIN_TUNING_FILTER	6
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_SIDECHAIN_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_sidechain)
 
@@ -905,10 +806,8 @@ typedef struct {
 } __attribute__((packed)) audpp_cmd_cfg_object_params_sidechain;
 
 
-/*
- * Command Structure to configure post processing parameters (QAFX)
- */
 
+#define AUDPP_CMD_QAFX			8
 #define AUDPP_CMD_CFG_OBJECT_PARAMS_QAFX_LEN		\
 	sizeof(audpp_cmd_cfg_object_params_qafx)
 
@@ -941,10 +840,6 @@ typedef struct {
 	unsigned short				commands;
 } __attribute__((packed)) audpp_cmd_cfg_object_params_qafx;
 
-/*
- * Command Structure to enable , disable or configure the reverberation effect
- * (Common)
- */
 
 #define AUDPP_CMD_REVERB_CONFIG		0x0001
 #define	AUDPP_CMD_REVERB_CONFIG_COMMON_LEN	\
@@ -971,10 +866,6 @@ typedef struct {
 	unsigned short			cmd_type;
 } __attribute__((packed)) audpp_cmd_reverb_config_common;
 
-/*
- * Command Structure to enable , disable or configure the reverberation effect
- * (ENV-0x0104)
- */
 
 #define	AUDPP_CMD_REVERB_CONFIG_ENV_104_LEN	\
 	sizeof(audpp_cmd_reverb_config_env_104)
@@ -991,10 +882,6 @@ typedef struct {
 	unsigned short			reverb_delay;
 } __attribute__((packed)) audpp_cmd_reverb_config_env_104;
 
-/*
- * Command Structure to enable , disable or configure the reverberation effect
- * (ENV-0x0015)
- */
 
 #define	AUDPP_CMD_REVERB_CONFIG_ENV_15_LEN	\
 	sizeof(audpp_cmd_reverb_config_env_15)
@@ -1005,9 +892,6 @@ typedef struct {
 	unsigned short			absolute_gain;
 } __attribute__((packed)) audpp_cmd_reverb_config_env_15;
 
-/*
- * Command Structure to configure post processing params (SRS TruMedia)
- */
 struct audpp_cmd_cfg_object_params_srstm_g {
 	audpp_cmd_cfg_object_params_common	common;
 	unsigned short				v[SRS_PARAMS_MAX_G];
@@ -1032,6 +916,8 @@ struct audpp_cmd_cfg_object_params_srstm_l {
 	audpp_cmd_cfg_object_params_common	common;
 	unsigned short				v[SRS_PARAMS_MAX_L];
 } __packed;
+#define AUDPP_CMD_SAMPLING_FREQUENCY	7
+#define AUDPP_CMD_QRUMBLE		9
 
-#endif /* QDSP5AUDPPCMDI_H */
+#endif 
 

@@ -17,7 +17,6 @@
 #include <mach/board.h>
 
 
-/* Macros assume PMIC GPIOs start at 0 */
 
 #define PROTOU_GPIO_WIFI_IRQ             29
 #define PROTOU_GPIO_WIFI_SHUTDOWN_N       13
@@ -27,4 +26,4 @@ int protou_init_mmc(unsigned int sys_rev);
 int __init protou_wifi_init(void);
 
 
-#endif /* __ARCH_ARM_MACH_MSM_BOARD_PROTOU_H */
+#endif 

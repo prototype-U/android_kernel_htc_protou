@@ -27,6 +27,7 @@
 #include <mach/htc_usb.h>
 #include <mach/rpc_hsusb.h>
 #include <mach/rpc_pmapp.h>
+#include <mach/htc_battery.h>
 #ifdef CONFIG_USB_G_ANDROID
 #include <linux/usb/android_composite.h>
 #include <mach/usbdiag.h>
@@ -38,7 +39,6 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 #include <mach/vreg.h>
-#include <linux/leds-pm8029.h>
 #include <mach/pmic.h>
 #include <mach/socinfo.h>
 #include <linux/mtd/nand.h>
@@ -46,6 +46,7 @@
 #include <asm/mach/mmc.h>
 #include <linux/i2c.h>
 #include <linux/i2c/sx150x.h>
+#include <linux/htc_flashlight.h>
 #include <linux/gpio.h>
 #include <linux/android_pmem.h>
 #include <linux/bootmem.h>
@@ -54,19 +55,20 @@
 #include <linux/power_supply.h>
 #include <linux/regulator/consumer.h>
 #include <mach/rpc_pmapp.h>
-#ifdef CONFIG_BATTERY_MSM
 #include <mach/msm_battery.h>
-#endif
-#include <linux/ds2746_battery.h>
-#include <linux/tps65200.h>
 #include <mach/system.h>
-#include <mach/htc_battery.h>
+#include <linux/smsc911x.h>
+#include <linux/atmel_maxtouch.h>
+#include <linux/fmem.h>
 #include <linux/msm_adc.h>
 #include <linux/himax8526a.h>
 #include <mach/htc_headset_mgr.h>
 #include <mach/htc_headset_gpio.h>
 #include <mach/htc_headset_pmic.h>
 #include <mach/htc_headset_one_wire.h>
+#include <linux/ds2746_battery.h>
+#include <linux/tps65200.h>
+#include <linux/ion.h>
 #include <asm/setup.h>
 #include "devices.h"
 #include "timer.h"
@@ -76,22 +78,20 @@
 #include "pm.h"
 #include <mach/rpc_server_handset.h>
 #include <mach/socinfo.h>
-#include <mach/msm_rtb.h>
+#include <linux/leds-pm8029.h>
 #include <linux/bma250.h>
 #include "pm-boot.h"
 #include <linux/proc_fs.h>
 #include <linux/cm3629.h>
-#include <linux/htc_flashlight.h>
+#include "board-protou.h"
+#include "board-protou-wifi.h"
 #ifdef CONFIG_PERFLOCK
 #include <mach/perflock.h>
 #endif
 #ifdef CONFIG_BT
 #include <mach/htc_bdaddress.h>
 #endif
-#include "board-protou.h"
-#include "board-protou-wifi.h"
 #include <mach/htc_util.h>
-#define CPU_FOOT_PRINT (MSM_HTC_DEBUG_INFO_BASE + 0x0)
 
 int htc_get_usb_accessory_adc_level(uint32_t *buffer);
 #include <mach/cable_detect.h>
@@ -124,7 +124,6 @@ static struct platform_device msm_wlan_ar6000_pm_device = {
 };
 #endif
 
-
 #if defined(CONFIG_I2C) && defined(CONFIG_GPIO_SX150X)
 static struct i2c_board_info core_exp_i2c_info[] __initdata = {
 	{
@@ -135,7 +134,7 @@ static struct i2c_board_info core_exp_i2c_info[] __initdata = {
 static void __init register_i2c_devices(void)
 {
 	if (machine_is_msm7x27a_surf() || machine_is_msm7625a_surf() ||
-			machine_is_msm8625_surf() || machine_is_protou() || machine_is_protodug() || machine_is_magnids() || machine_is_protodcg())
+			machine_is_msm8625_surf() || machine_is_protou() || 0 || 0 || 0)
 		sx150x_data[SX150X_CORE].io_open_drain_ena = 0xe0f0;
 
 	core_exp_i2c_info[0].platform_data =
@@ -146,7 +145,6 @@ static void __init register_i2c_devices(void)
 				ARRAY_SIZE(core_exp_i2c_info));
 }
 #endif
-
 #if defined(CONFIG_INPUT_CAPELLA_CM3629)
 #define PROTOU_GPIO_PROXIMITY_INT 36
 static struct cm3629_platform_data cm36282_pdata = {
@@ -171,11 +169,11 @@ static struct cm3629_platform_data cm36282_pdata = {
 };
 
 static struct i2c_board_info i2c_cm36282_devices[] = {
-	{
-		I2C_BOARD_INFO(CM3629_I2C_NAME,0xC0 >> 1),
+        {
+                I2C_BOARD_INFO(CM3629_I2C_NAME,0xC0 >> 1),
         .platform_data = &cm36282_pdata,
         .irq = MSM_GPIO_TO_INT(PROTOU_GPIO_PROXIMITY_INT),
-	},
+        },
 };
 #endif
 
@@ -184,14 +182,14 @@ static uint32_t qup_i2c_gpio_table_io[] = {
 	GPIO_CFG(61, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(131, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(132, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	};
+};
 
 static uint32_t qup_i2c_gpio_table_hw[] = {
 	GPIO_CFG(60, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(61, 1, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(131, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
 	GPIO_CFG(132, 2, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
-	};
+};
 
 static void gsbi_qup_i2c_gpio_config(int adap_id, int config_type)
 {
@@ -219,10 +217,26 @@ static struct msm_i2c_platform_data msm_gsbi1_qup_i2c_pdata = {
 	.clk_freq		= 400000,
 	.msm_i2c_config_gpio	= gsbi_qup_i2c_gpio_config,
 };
+#ifdef CONFIG_ARCH_MSM7X27A
+#define CAMERA_ZSL_SIZE		(SZ_1M * 60)
+#endif
+
+#ifdef CONFIG_ION_MSM
+#define MSM_ION_HEAP_NUM        4
+static struct platform_device ion_dev;
+static int msm_ion_camera_size;
+static int msm_ion_audio_size;
+static int msm_ion_sf_size;
+#endif
 
 static struct android_usb_platform_data android_usb_pdata = {
 	.vendor_id              = 0x0bb4,
-	.product_id             = 0x0d00,
+#ifdef CONFIG_MACH_PROTOU
+	.product_id             = 0x0dd5,
+#else
+	
+	.product_id             = 0x0dd0,
+#endif
 	.version                = 0x0100,
 	.product_name           = "Android Phone",
 	.manufacturer_name      = "HTC",
@@ -232,10 +246,16 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.functions              = usb_functions_all,
 	.usb_id_pin_gpio	= 42,
 	.usb_diag_interface	= "diag",
-	.fserial_init_string = "tty:modem,tty:,tty:serial,tty:",
-	.nluns                  = 2,
+	.fserial_init_string = "tty:modem,tty:autobot,tty:serial,tty:autobot",
+	.nluns                  = 1,
 };
 
+static int __init board_serialno_setup(char *serialno)
+{
+	android_usb_pdata.serial_number = serialno;
+	return 1;
+}
+__setup("androidboot.serialno=", board_serialno_setup);
 static struct platform_device android_usb_device = {
 	.name	= "android_usb",
 	.id	= -1,
@@ -304,7 +324,7 @@ static int msm_hsusb_ldo_init(int init)
 
 		return 0;
 	}
-	/* else fall through */
+	
 reg_free:
 	regulator_put(reg_hsusb);
 out:
@@ -342,7 +362,6 @@ static int msm_hsusb_pmic_notif_init(void (*callback)(int online), int init)
 	return ret;
 }
 #endif
-#endif
 
 static int phy_init_settings[] =
 {	0x0c, 0x31,
@@ -363,30 +382,78 @@ static struct msm_otg_platform_data msm_otg_pdata = {
         .chg_connected           = hsusb_chg_connected,
         .chg_vbus_draw           = hsusb_chg_vbus_draw,
 };
-static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
-	.phy_init_seq		= phy_init_settings,
-	.is_phy_status_timer_on = 1,
-};
 
 void protou_add_usb_devices(void)
 {
+#if 0
+FIXME
 	printk(KERN_INFO "%s rev: %d\n", __func__, system_rev);
+#endif
 	android_usb_pdata.products[0].product_id =
 		android_usb_pdata.product_id;
 
-	/* diag bit set */
+	
 	if (get_radio_flag() & 0x20000)
 		android_usb_pdata.diag_init = 1;
-	/* add cdrom support in normal mode */
+	
 	if (board_mfg_mode() == 0) {
-		android_usb_pdata.nluns = 3;
-		android_usb_pdata.cdrom_lun = 0x4;
+		android_usb_pdata.nluns = 1;
+		android_usb_pdata.cdrom_lun = 0x1;
 	}
 
 	msm8625_device_gadget_peripheral.dev.parent = &msm8625_device_otg.dev;
 	platform_device_register(&msm8625_device_gadget_peripheral);
 	platform_device_register(&android_usb_device);
 }
+
+
+#endif
+
+static struct msm_hsusb_gadget_platform_data msm_gadget_pdata = {
+	.phy_init_seq		= phy_init_settings,
+	.is_phy_status_timer_on = 1,
+};
+
+#ifdef CONFIG_PERFLOCK
+static unsigned msm7x27a_perf_acpu_table[] = {
+	480000000, 
+	600000000, 
+	1008000000,
+	1008000000,
+	1008000000,
+};
+
+static struct perflock_data msm7x27a_floor_data = {
+	.perf_acpu_table = msm7x27a_perf_acpu_table,
+	.table_size = ARRAY_SIZE(msm7x27a_perf_acpu_table),
+};
+
+static struct perflock_data msm7x27a_cpufreq_ceiling_data = {
+	.perf_acpu_table = msm7x27a_perf_acpu_table,
+	.table_size = ARRAY_SIZE(msm7x27a_perf_acpu_table),
+};
+
+static struct perflock_pdata perflock_pdata = {
+	.perf_floor = &msm7x27a_floor_data,
+	.perf_ceiling = &msm7x27a_cpufreq_ceiling_data,
+};
+
+struct platform_device msm7x27a_device_perf_lock = {
+	.name = "perf_lock",
+	.id = -1,
+	.dev = {
+		.platform_data = &perflock_pdata,
+	},
+};
+
+#ifdef CONFIG_PERFLOCK_SCREEN_POLICY
+static struct perf_lock screen_off_ceiling_lock;
+static struct perflock_screen_policy msm7x27a_screen_off_policy = {
+	.on_min  = NULL,
+	.off_max = &screen_off_ceiling_lock,
+};
+#endif 
+#endif
 
 static int get_thermal_id(void)
 {
@@ -397,41 +464,33 @@ static int get_battery_id(void)
 	return BATTERY_ID_FORMOSA_SANYO;
 }
 
-#ifdef CONFIG_TPS65200
-static void kick_charger_ic(int charge_enable)
-{
-	printk("[BATT] re-enable charger-> %d", charge_enable);
-	tps_set_charger_ctrl(charge_enable);
-}
-#endif
-
 static void protou_poweralg_config_init(struct poweralg_config_type *config)
 {
 	pr_info("[BATT] %s() is used\n",__func__);
 	config->full_charging_mv = 4250;
 	config->full_charging_ma = 50;
-	config->full_pending_ma = 0;		/* disabled*/
+	config->full_pending_ma = 0;		
 	config->full_charging_timeout_sec = 60 * 60;
 	config->voltage_recharge_mv = 4250;
 	config->voltage_exit_full_mv = 4200;
-	config->min_taper_current_mv = 0;	/* disabled */
-	config->min_taper_current_ma = 0;	/* disabled */
+	config->min_taper_current_mv = 0;	
+	config->min_taper_current_ma = 0;	
 	config->wait_votlage_statble_sec = 1 * 60;
 	config->predict_timeout_sec = 10;
 	config->polling_time_in_charging_sec = 30;
 
 	config->enable_full_calibration = TRUE;
 	config->enable_weight_percentage = TRUE;
-	config->software_charger_timeout_sec = 57600; /* 16hr */
-	config->superchg_software_charger_timeout_sec = 0;	/* disabled */
-	config->charger_hw_safety_timer_watchdog_sec =  0;	/* disabled */
+	config->software_charger_timeout_sec = 57600; 
+	config->superchg_software_charger_timeout_sec = 0;	
+	config->charger_hw_safety_timer_watchdog_sec =  0;	
 
 	config->debug_disable_shutdown = FALSE;
 	config->debug_fake_room_temp = FALSE;
 
 	config->debug_disable_hw_timer = FALSE;
 	config->debug_always_predict = FALSE;
-	config->por_reset_fail = TRUE; /* HW workaround, if remove and insert battery soon, POR register won't reset.*/
+	config->por_reset_fail= TRUE; 
 	config->full_level = 0;
 }
 
@@ -439,14 +498,6 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 {
 	static int pState = 0;
 	int old_pState = pState;
-	/* pStates:
-		0: initial (temp detection)
-		1: temp < 0 degree c
-		2: 0 <= temp <= 45 degree c
-		3: 45 < temp <= 48 degree c
-		4: 48 < temp <= 60 degree c
-		5: 60 < temp
-	*/
 	enum {
 		PSTAT_DETECT = 0,
 		PSTAT_LOW_STOP,
@@ -455,10 +506,8 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 		PSTAT_LIMITED,
 		PSTAT_HIGH_STOP
 	};
-	/* generally we assumed that pState implies last temp.
-		it won't hold if temp changes faster than sample rate */
 
-	// step 1. check if change state condition is hit
+	
 	pr_debug("[BATT] %s(i=%d, v=%d, t=%d, %d, %d)\n",__func__, ibat_ma, vbat_mv, temp_01c, *chg_allowed, *hchg_allowed);
 	switch(pState) {
 		default:
@@ -478,14 +527,14 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 		case PSTAT_LOW_STOP:
 			if (30 <= temp_01c)
 				pState = PSTAT_NORMAL;
-			/* suppose never jump to LIMITED/HIGH_STOP from here */
+			
 			break;
 		case PSTAT_NORMAL:
 			if (temp_01c < 0)
 				pState = PSTAT_LOW_STOP;
 			else if (600 < temp_01c)
 				pState = PSTAT_HIGH_STOP;
-			else if (480 < temp_01c) /* also implies t <= 550 */
+			else if (480 < temp_01c) 
 				pState = PSTAT_LIMITED;
 			else if (450 < temp_01c)
 				pState = PSTAT_SLOW;
@@ -517,15 +566,13 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 				pState = PSTAT_SLOW;
 			else if ((temp_01c <= 570) && (vbat_mv <= 3800))
 				pState = PSTAT_LIMITED;
-			/* suppose never jump to LOW_STOP from here */
+			
 			break;
 	}
 	if (old_pState != pState)
 		pr_info("[BATT] Protect pState changed from %d to %d\n", old_pState, pState);
 
-	/* step 2. check state protect condition */
-	/* chg_allowed = TRUE:only means it's allowed no matter it has charger.
-		same as hchg_allowed. */
+	
 	switch(pState) {
 		default:
 		case PSTAT_DETECT:
@@ -539,14 +586,14 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 			*chg_allowed = TRUE;
 			*hchg_allowed = TRUE;
 			break;
-		case PSTAT_SLOW:	/* 4.2V Charge Full, 4.15V recharge */
+		case PSTAT_SLOW:	
 			if (4200 < vbat_mv)
 				*chg_allowed = FALSE;
 			else if (vbat_mv <= 4150)
 				*chg_allowed = TRUE;
 			*hchg_allowed = FALSE;
 			break;
-		case PSTAT_LIMITED:	/* 4.1V Charge Full, 3.8V recharge */
+		case PSTAT_LIMITED:	
 			if (PSTAT_LIMITED != old_pState)
 				*chg_allowed = TRUE;
 			if (4100 < vbat_mv)
@@ -561,7 +608,7 @@ static int protou_update_charging_protect_flag(int ibat_ma, int vbat_mv, int tem
 			break;
 	}
 
-	/* update temp_fault */
+	
 	if (PSTAT_NORMAL == pState)
 		*temp_fault = FALSE;
 	else
@@ -577,6 +624,7 @@ static struct htc_battery_platform_data htc_battery_pdev_data = {
 	.guage_driver = GUAGE_DS2746,
 	.charger = SWITCH_CHARGER_TPS65200,
 	.m2a_cable_detect = 1,
+	.enable_bootup_voltage = 3400,
 };
 
 static struct platform_device htc_battery_pdev = {
@@ -587,14 +635,13 @@ static struct platform_device htc_battery_pdev = {
 	},
 };
 
-/* battery parameters */
 UINT32 m_parameter_TWS_SDI_1650mah[] = {
-	/* capacity (in 0.01%) -> voltage (in mV)*/
+	
 	10000, 4250, 8100, 4101, 5100, 3846,
 	2000, 3700, 900, 3641, 0, 3411,
 };
 UINT32 m_parameter_Formosa_Sanyo_1650mah[] = {
-	/* capacity (in 0.01%) -> voltage (in mV)*/
+	
 	10000, 4250, 8200, 4145, 5000, 3845,
 	1800, 3735, 500, 3625, 0, 3405,
 };
@@ -614,6 +661,7 @@ static UINT32* m_param_tbl[] = {
 	m_parameter_PydTD_1520mah
 };
 
+static UINT32 capacity[] = {1650, 1650, 1650, 1520};
 static UINT32 fl_25[] = {1650, 1620, 1650, 1520};
 static UINT32 pd_m_coef[] = {26, 22, 26, 26};
 static UINT32 pd_m_resl[] = {100, 100, 100, 100};
@@ -639,6 +687,7 @@ static struct battery_parameter protou_battery_parameter = {
 	.temp_index_tbl = NULL,
 	.m_param_tbl = m_param_tbl,
 	.m_param_tbl_size = sizeof(m_param_tbl)/sizeof(UINT32*),
+	.capacity = capacity,
 };
 
 static ds2746_platform_data ds2746_pdev_data = {
@@ -646,10 +695,10 @@ static ds2746_platform_data ds2746_pdev_data = {
 	.func_get_battery_id = get_battery_id,
 	.func_poweralg_config_init = protou_poweralg_config_init,
 	.func_update_charging_protect_flag = protou_update_charging_protect_flag,
-	.r2_kohm = 0,	/* use get_battery_id, doesn't need this */
+	.r2_kohm = 0,	
 	.batt_param = &protou_battery_parameter,
 #ifdef CONFIG_TPS65200
-	.func_kick_charger_ic = kick_charger_ic,
+	.func_kick_charger_ic = tps65200_kick_charger_ic,
 #endif
 };
 
@@ -662,9 +711,9 @@ static struct platform_device ds2746_battery_pdev = {
 };
 
 static struct tps65200_platform_data tps65200_data = {
-	/* Jenny: Enable when GPIO ready */
-	//.gpio_chg_int = MSM_GPIO_TO_INT(PROTOU_GPIO_CHG_INT),
-	//.gpio_chg_stat = MSM_GPIO_TO_INT(PROTOU_GPIO_CHG_STAT),
+	
+	
+	
 	.gpio_chg_int = MSM_GPIO_TO_INT(40),
 	.gpio_chg_stat = MSM_GPIO_TO_INT(41),
 };
@@ -689,55 +738,40 @@ static int __init check_dq_setup(char *str)
 __setup("androidboot.dq=", check_dq_setup);
 #endif
 
-static int __init board_serialno_setup(char *serialno)
-{
-	android_usb_pdata.serial_number = serialno;
-	return 1;
-}
-__setup("androidboot.serialno=", board_serialno_setup);
-
-#ifdef CONFIG_PERFLOCK
-static unsigned msm7x27a_perf_acpu_table[] = {
-	245760000, /* PERF_LOCK_LOWEST */
-	320000000, /* PERF_LOCK_LOW */
-	480000000, /* PERF_LOCK_MEDIUM */
-	600000000, /* PERF_LOCK_HIGH */
-	1008000000,/* PERF_LOCK_HIGHEST */
+#if 0
+static struct resource smc91x_resources[] = {
+	[0] = {
+		.start = 0x90000300,
+		.end   = 0x900003ff,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = MSM_GPIO_TO_INT(4),
+		.end   = MSM_GPIO_TO_INT(4),
+		.flags = IORESOURCE_IRQ,
+	},
 };
 
-static struct perflock_platform_data msm7x27a_perflock_data = {
-	.perf_acpu_table = msm7x27a_perf_acpu_table,
-	.table_size = ARRAY_SIZE(msm7x27a_perf_acpu_table),
+static struct platform_device smc91x_device = {
+	.name           = "smc91x",
+	.id             = 0,
+	.num_resources  = ARRAY_SIZE(smc91x_resources),
+	.resource       = smc91x_resources,
 };
-
-static unsigned msm7x27a_cpufreq_ceiling_acpu_table[] = {
-	320000000, /* CEILING_LEVEL_MEDIUM :4,5 */
-	480000000, /* CEILING_LEVEL_HIGH   :2,3 */
-	600000000, /* CEILING_LEVEL_HIGHEST:0,1 */
+#endif
+#if 0
+#ifdef CONFIG_SERIAL_MSM_HS
+static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
+	.inject_rx_on_wakeup	= 1,
+	.rx_to_inject		= 0xFD,
 };
-
-static struct perflock_platform_data msm7x27a_cpufreq_ceiling_data = {
-	.perf_acpu_table = msm7x27a_cpufreq_ceiling_acpu_table,
-	.table_size = ARRAY_SIZE(msm7x27a_cpufreq_ceiling_acpu_table),
-};
-
-#ifdef CONFIG_PERFLOCK_SCREEN_POLICY
-//static struct perf_lock screen_on_perf_lock;
-static struct perf_lock screen_off_ceiling_lock;
-static struct perflock_screen_policy msm7x27a_screen_off_policy = {
-	.on_min  = NULL,
-		   /*  245760 = PERF_LOCK_LOWEST */
-	.off_max = &screen_off_ceiling_lock,
-		   /*  600000 = CEILING_LEVEL_HIGHEST */
-};
-#endif /* CONFIG_PERFLOCK_SCREEN_POLICY */
+#endif
 #endif
 
 #ifdef CONFIG_BT
-/* BT */
-#define PROTOU_GPIO_BT_HOST_WAKE_XC     (28)
-#define PROTOU_GPIO_BT_HOST_WAKE_XA     (83)
-#define PROTOU_GPIO_BT_WAKE             (107)
+#define PROTOU_GPIO_BT_HOST_WAKE_XC	(28)
+#define PROTOU_GPIO_BT_HOST_WAKE_XA	(83)
+#define PROTOU_GPIO_BT_WAKE		(107)
 #endif
 
 #ifdef CONFIG_SERIAL_MSM_HS
@@ -745,7 +779,7 @@ static struct msm_serial_hs_platform_data msm_uart_dm1_pdata = {
 	.inject_rx_on_wakeup = 0,
 	.cpu_lock_supported = 1,
 
-	/* for bcm BT */
+	
 	.bt_wakeup_pin_supported = 1,
 	.bt_wakeup_pin = PROTOU_GPIO_BT_WAKE,
 	.host_wakeup_pin = PROTOU_GPIO_BT_HOST_WAKE_XC,
@@ -814,9 +848,8 @@ static struct msm_pm_boot_platform_data msm_pm_boot_pdata __initdata = {
 	.p_addr = 0,
 };
 
-/* 8625 PM platform data */
 static struct msm_pm_platform_data msm8625_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
-	/* CORE0 entries */
+	
 	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE)] = {
 					.idle_supported = 1,
 					.suspend_supported = 1,
@@ -835,7 +868,7 @@ static struct msm_pm_platform_data msm8625_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 					.residency = 20000,
 	},
 
-	/* picked latency & redisdency values from 7x30 */
+	
 	[MSM_PM_MODE(0, MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)] = {
 					.idle_supported = 0,
 					.suspend_supported = 0,
@@ -854,7 +887,7 @@ static struct msm_pm_platform_data msm8625_pm_data[MSM_PM_SLEEP_MODE_NR * 2] = {
 					.residency = 10,
 	},
 
-	/* picked latency & redisdency values from 7x30 */
+	
 	[MSM_PM_MODE(1, MSM_PM_SLEEP_MODE_POWER_COLLAPSE_STANDALONE)] = {
 					.idle_supported = 1,
 					.suspend_supported = 1,
@@ -885,26 +918,16 @@ static struct android_pmem_platform_data android_pmem_adsp_pdata = {
 	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
 	.cached = 1,
 	.memory_type = MEMTYPE_EBI1,
+	.request_region = request_fmem_c_region,
+	.release_region = release_fmem_c_region,
+	.reusable = 1,
 };
-static struct android_pmem_platform_data android_pmem_adsp2_pdata = {
-	.name = "pmem_adsp2",
-	.allocator_type = PMEM_ALLOCATORTYPE_BITMAP,
-	.cached = 0,
-	.memory_type = MEMTYPE_EBI1,
-};
-
 
 static struct platform_device android_pmem_adsp_device = {
 	.name = "android_pmem",
 	.id = 1,
 	.dev = { .platform_data = &android_pmem_adsp_pdata },
 };
-static struct platform_device android_pmem_adsp2_device = {
-	.name = "android_pmem",
-	.id = 3,
-	.dev = { .platform_data = &android_pmem_adsp2_pdata },
-};
-
 
 static unsigned pmem_mdp_size = MSM_PMEM_MDP_SIZE;
 static int __init pmem_mdp_size_setup(char *p)
@@ -923,156 +946,6 @@ static int __init pmem_adsp_size_setup(char *p)
 }
 
 early_param("pmem_adsp_size", pmem_adsp_size_setup);
-
-static unsigned pmem_adsp2_size = MSM_PMEM_ADSP2_SIZE;
-static int __init pmem_adsp2_size_setup(char *p)
-{
-	pmem_adsp2_size = memparse(p, NULL);
-	return 0;
-}
-
-early_param("pmem_adsp2_size", pmem_adsp2_size_setup);
-
-
-#define SND(desc, num) { .name = #desc, .id = num }
-static struct snd_endpoint snd_endpoints_list[] = {
-	SND(HANDSET, 0),
-	SND(SPEAKER, 1),
-	SND(HEADSET,2),
-	SND(BT, 3),
-	SND(CARKIT, 3),
-	SND(TTY_FULL, 5),
-	SND(TTY_HEADSET, 5),
-	SND(TTY_VCO, 6),
-	SND(TTY_HCO, 7),
-	SND(NO_MIC_HEADSET, 8),
-	SND(FM_HEADSET, 9),
-	SND(HEADSET_AND_SPEAKER, 10),
-	SND(STEREO_HEADSET_AND_SPEAKER, 10),
-	SND(BT_EC_OFF, 44),
-	SND(CURRENT, 256),
-};
-#undef SND
-
-static struct msm_snd_endpoints msm_device_snd_endpoints = {
-	.endpoints = snd_endpoints_list,
-	.num = sizeof(snd_endpoints_list) / sizeof(struct snd_endpoint)
-};
-
-static struct platform_device msm_device_snd = {
-	.name = "msm_snd",
-	.id = -1,
-	.dev    = {
-		.platform_data = &msm_device_snd_endpoints
-	},
-};
-
-#define DEC0_FORMAT ((1<<MSM_ADSP_CODEC_MP3)| \
-	(1<<MSM_ADSP_CODEC_AAC)|(1<<MSM_ADSP_CODEC_WMA)| \
-	(1<<MSM_ADSP_CODEC_WMAPRO)|(1<<MSM_ADSP_CODEC_AMRWB)| \
-	(1<<MSM_ADSP_CODEC_AMRNB)|(1<<MSM_ADSP_CODEC_WAV)| \
-	(1<<MSM_ADSP_CODEC_ADPCM)|(1<<MSM_ADSP_CODEC_YADPCM)| \
-	(1<<MSM_ADSP_CODEC_EVRC)|(1<<MSM_ADSP_CODEC_QCELP))
-#define DEC1_FORMAT ((1<<MSM_ADSP_CODEC_MP3)| \
-	(1<<MSM_ADSP_CODEC_AAC)|(1<<MSM_ADSP_CODEC_WMA)| \
-	(1<<MSM_ADSP_CODEC_WMAPRO)|(1<<MSM_ADSP_CODEC_AMRWB)| \
-	(1<<MSM_ADSP_CODEC_AMRNB)|(1<<MSM_ADSP_CODEC_WAV)| \
-	(1<<MSM_ADSP_CODEC_ADPCM)|(1<<MSM_ADSP_CODEC_YADPCM)| \
-	(1<<MSM_ADSP_CODEC_EVRC)|(1<<MSM_ADSP_CODEC_QCELP))
-#define DEC2_FORMAT ((1<<MSM_ADSP_CODEC_MP3)| \
-	(1<<MSM_ADSP_CODEC_AAC)|(1<<MSM_ADSP_CODEC_WMA)| \
-	(1<<MSM_ADSP_CODEC_WMAPRO)|(1<<MSM_ADSP_CODEC_AMRWB)| \
-	(1<<MSM_ADSP_CODEC_AMRNB)|(1<<MSM_ADSP_CODEC_WAV)| \
-	(1<<MSM_ADSP_CODEC_ADPCM)|(1<<MSM_ADSP_CODEC_YADPCM)| \
-	(1<<MSM_ADSP_CODEC_EVRC)|(1<<MSM_ADSP_CODEC_QCELP))
-#define DEC3_FORMAT ((1<<MSM_ADSP_CODEC_MP3)| \
-	(1<<MSM_ADSP_CODEC_AAC)|(1<<MSM_ADSP_CODEC_WMA)| \
-	(1<<MSM_ADSP_CODEC_WMAPRO)|(1<<MSM_ADSP_CODEC_AMRWB)| \
-	(1<<MSM_ADSP_CODEC_AMRNB)|(1<<MSM_ADSP_CODEC_WAV)| \
-	(1<<MSM_ADSP_CODEC_ADPCM)|(1<<MSM_ADSP_CODEC_YADPCM)| \
-	(1<<MSM_ADSP_CODEC_EVRC)|(1<<MSM_ADSP_CODEC_QCELP))
-#define DEC4_FORMAT (1<<MSM_ADSP_CODEC_MIDI)
-
-static unsigned int dec_concurrency_table[] = {
-	/* Audio LP */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DMA)), 0,
-	0, 0, 0,
-
-	/* Concurrency 1 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-
-	 /* Concurrency 2 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-
-	/* Concurrency 3 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-
-	/* Concurrency 4 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-
-	/* Concurrency 5 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-
-	/* Concurrency 6 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_TUNNEL)|
-			(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	0, 0, 0, 0,
-
-	/* Concurrency 7 */
-	(DEC0_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC1_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC2_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC3_FORMAT|(1<<MSM_ADSP_MODE_NONTUNNEL)|(1<<MSM_ADSP_OP_DM)),
-	(DEC4_FORMAT),
-};
-
-#define DEC_INFO(name, queueid, decid, nr_codec) { .module_name = name, \
-	.module_queueid = queueid, .module_decid = decid, \
-	.nr_codec_support = nr_codec}
-
-static struct msm_adspdec_info dec_info_list[] = {
-	DEC_INFO("AUDPLAY0TASK", 13, 0, 11), /* AudPlay0BitStreamCtrlQueue */
-	DEC_INFO("AUDPLAY1TASK", 14, 1, 11),  /* AudPlay1BitStreamCtrlQueue */
-	DEC_INFO("AUDPLAY2TASK", 15, 2, 11),  /* AudPlay2BitStreamCtrlQueue */
-	DEC_INFO("AUDPLAY3TASK", 16, 3, 11),  /* AudPlay3BitStreamCtrlQueue */
-	DEC_INFO("AUDPLAY4TASK", 17, 4, 1),  /* AudPlay4BitStreamCtrlQueue */
-};
-
-static struct msm_adspdec_database msm_device_adspdec_database = {
-	.num_dec = ARRAY_SIZE(dec_info_list),
-	.num_concurrency_support = (ARRAY_SIZE(dec_concurrency_table) / \
-					ARRAY_SIZE(dec_info_list)),
-	.dec_concurrency_table = dec_concurrency_table,
-	.dec_info_list = dec_info_list,
-};
-
-static struct platform_device msm_device_adspdec = {
-	.name = "msm_adspdec",
-	.id = -1,
-	.dev    = {
-		.platform_data = &msm_device_adspdec_database
-	},
-};
 
 static struct android_pmem_platform_data android_pmem_audio_pdata = {
 	.name = "pmem_audio",
@@ -1102,8 +975,9 @@ static struct platform_device android_pmem_device = {
 static u32 msm_calculate_batt_capacity(u32 current_voltage);
 
 static struct msm_psy_batt_pdata msm_psy_batt_data = {
-	.voltage_min_design     = 2800,
-	.voltage_max_design     = 4300,
+	.voltage_min_design     = 3200,
+	.voltage_max_design     = 4200,
+	.voltage_fail_safe      = 3340,
 	.avail_chg_sources      = AC_CHG | USB_CHG ,
 	.batt_technology        = POWER_SUPPLY_TECHNOLOGY_LION,
 	.calculate_capacity     = &msm_calculate_batt_capacity,
@@ -1114,7 +988,12 @@ static u32 msm_calculate_batt_capacity(u32 current_voltage)
 	u32 low_voltage	 = msm_psy_batt_data.voltage_min_design;
 	u32 high_voltage = msm_psy_batt_data.voltage_max_design;
 
-	return (current_voltage - low_voltage) * 100
+	if (current_voltage <= low_voltage)
+		return 0;
+	else if (current_voltage >= high_voltage)
+		return 100;
+	else
+		return (current_voltage - low_voltage) * 100
 			/ (high_voltage - low_voltage);
 }
 
@@ -1122,6 +1001,43 @@ static struct platform_device msm_batt_device = {
 	.name               = "msm-battery",
 	.id                 = -1,
 	.dev.platform_data  = &msm_psy_batt_data,
+};
+#endif
+#if 0
+static struct smsc911x_platform_config smsc911x_config = {
+	.irq_polarity	= SMSC911X_IRQ_POLARITY_ACTIVE_HIGH,
+	.irq_type	= SMSC911X_IRQ_TYPE_PUSH_PULL,
+	.flags		= SMSC911X_USE_16BIT,
+};
+
+static struct resource smsc911x_resources[] = {
+	[0] = {
+		.start	= 0x90000000,
+		.end	= 0x90007fff,
+		.flags	= IORESOURCE_MEM,
+	},
+	[1] = {
+		.start	= MSM_GPIO_TO_INT(48),
+		.end	= MSM_GPIO_TO_INT(48),
+		.flags	= IORESOURCE_IRQ | IORESOURCE_IRQ_HIGHLEVEL,
+	},
+};
+
+static struct platform_device smsc911x_device = {
+	.name		= "smsc911x",
+	.id		= 0,
+	.num_resources	= ARRAY_SIZE(smsc911x_resources),
+	.resource	= smsc911x_resources,
+	.dev		= {
+		.platform_data	= &smsc911x_config,
+	},
+};
+
+static struct msm_gpio smsc911x_gpios[] = {
+	{ GPIO_CFG(48, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA),
+							 "smsc911x_irq"  },
+	{ GPIO_CFG(49, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_6MA),
+							 "eth_fifo_sel" },
 };
 #endif
 static char *msm_adc_surf_device_names[] = {
@@ -1141,29 +1057,31 @@ static struct platform_device msm_adc_device = {
 		.platform_data = &msm_adc_pdata,
 	},
 };
-
-#if defined(CONFIG_MSM_RTB)
-static struct msm_rtb_platform_data msm_rtb_pdata = {
-	.size = SZ_128K,
-};
-
-static int __init msm_rtb_set_buffer_size(char *p)
+#if 0
+#define ETH_FIFO_SEL_GPIO	49
+static void msm7x27a_cfg_smsc911x(void)
 {
-	int s;
-	s = memparse(p, NULL);
-	msm_rtb_pdata.size = ALIGN(s, SZ_4K);
-	return 0;
-}
-early_param("msm_rtb_size", msm_rtb_set_buffer_size);
-static struct platform_device msm_rtb_device = {
-	.name = "msm_rtb",
-	.id = -1,
-	.dev = {
-		.platform_data = &msm_rtb_pdata,
-	},
-};
-#endif
+	int res;
 
+	res = msm_gpios_request_enable(smsc911x_gpios,
+				 ARRAY_SIZE(smsc911x_gpios));
+	if (res) {
+		pr_err("%s: unable to enable gpios for SMSC911x\n", __func__);
+		return;
+	}
+
+	
+	res = gpio_direction_output(ETH_FIFO_SEL_GPIO, 0);
+	if (res) {
+		pr_err("%s: unable to get direction for gpio %d\n", __func__,
+							 ETH_FIFO_SEL_GPIO);
+		msm_gpios_disable_free(smsc911x_gpios,
+						 ARRAY_SIZE(smsc911x_gpios));
+		return;
+	}
+	gpio_set_value(ETH_FIFO_SEL_GPIO, 0);
+}
+#endif
 #if 0
 
 #if defined(CONFIG_SERIAL_MSM_HSL_CONSOLE) \
@@ -1190,61 +1108,158 @@ static void msm7x27a_cfg_uart2dm_serial(void)
 #else
 static void msm7x27a_cfg_uart2dm_serial(void) { }
 #endif
-
 #endif
-static struct gpio_led gpio_exp_leds_config[] = {
-	{
-		.name = "button-backlight",
-		.gpio = 124,
-		.active_low = 0,
-		.retain_state_suspended = 0,
-		.default_state = LEDS_GPIO_DEFSTATE_OFF,
+static struct fmem_platform_data fmem_pdata;
+
+static struct platform_device fmem_device = {
+	.name = "fmem",
+	.id = 1,
+	.dev = { .platform_data = &fmem_pdata },
+};
+
+__maybe_unused static struct platform_device *rumi_sim_devices[] __initdata = {
+	&msm_device_dmov,
+	&msm_device_smd,
+	&msm_device_uart1,
+	&msm_device_nand,
+#if 0
+	&msm_device_uart_dm1,
+#endif
+	&msm_gsbi0_qup_i2c_device,
+	&msm_gsbi1_qup_i2c_device,
+};
+
+__maybe_unused static struct platform_device *msm8625_rumi3_devices[] __initdata = {
+	&msm8625_device_dmov,
+	&msm8625_device_smd,
+	&msm8625_device_uart1,
+	&msm8625_gsbi0_qup_i2c_device,
+};
+
+#define PM8058ADC_16BIT(adc) ((adc * 1800) / 65535) 
+int64_t protou_get_usbid_adc(void)
+{
+	uint32_t adc_value = 0xffffffff;
+#if 1
+	htc_get_usb_accessory_adc_level(&adc_value);
+#endif
+	adc_value = PM8058ADC_16BIT(adc_value);
+	return adc_value;
+}
+
+static uint32_t usb_ID_PIN_input_table[] = {
+	GPIO_CFG(PROTOU_GPIO_USB_ID, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
+};
+
+static uint32_t usb_ID_PIN_ouput_table[] = {
+	GPIO_CFG(PROTOU_GPIO_USB_ID, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
+};
+
+
+static void config_usb_id_table(uint32_t *table, int len)
+{
+	int n, rc;
+	for (n = 0; n < len; n++) {
+		rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
+		if (rc) {
+			pr_err("[CAM] %s: gpio_tlmm_config(%#x)=%d\n",
+				__func__, table[n], rc);
+			break;
+		}
+	}
+}
+
+void config_protou_usb_id_gpios(bool output)
+{
+	if (output) {
+		config_usb_id_table(usb_ID_PIN_ouput_table, ARRAY_SIZE(usb_ID_PIN_ouput_table));
+		gpio_set_value(42, 1);
+		printk(KERN_INFO "%s %d output high\n",  __func__, 42);
+	} else {
+		config_usb_id_table(usb_ID_PIN_input_table, ARRAY_SIZE(usb_ID_PIN_input_table));
+		printk(KERN_INFO "%s %d input none pull\n",  __func__, 42);
+	}
+}
+
+static struct cable_detect_platform_data cable_detect_pdata = {
+	.detect_type = CABLE_TYPE_PMIC_ADC,
+	.usb_id_pin_gpio = 42,
+	.config_usb_id_gpios = config_protou_usb_id_gpios,
+	.get_adc_cb		= protou_get_usbid_adc,
+};
+
+static struct platform_device cable_detect_device = {
+	.name	= "cable_detect",
+	.id	= -1,
+	.dev	= {
+		.platform_data = &cable_detect_pdata,
 	},
+};
+static struct resource ram_console_resources[] = {
+	{
+		.start  = MSM_RAM_CONSOLE_BASE,
+		.end    = MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE - 1,
+		.flags  = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device ram_console_device = {
+	.name           = "ram_console",
+	.id             = -1,
+	.num_resources  = ARRAY_SIZE(ram_console_resources),
+	.resource       = ram_console_resources,
+};
+static struct gpio_led gpio_exp_leds_config[] = {
+        {
+                .name = "button-backlight",
+                .gpio = 124,
+                .active_low = 0,
+                .retain_state_suspended = 0,
+                .default_state = LEDS_GPIO_DEFSTATE_OFF,
+        },
 };
 
 static struct gpio_led_platform_data gpio_leds_pdata = {
-	.num_leds = ARRAY_SIZE(gpio_exp_leds_config),
-	.leds = gpio_exp_leds_config,
+        .num_leds = ARRAY_SIZE(gpio_exp_leds_config),
+        .leds = gpio_exp_leds_config,
 };
 
 static struct platform_device gpio_leds = {
-	.name		  = "leds-gpio",
-	.id			= -1,
-	.dev		   = {
-		.platform_data = &gpio_leds_pdata,
-	},
+        .name             = "leds-gpio",
+        .id                     = -1,
+        .dev               = {
+                .platform_data = &gpio_leds_pdata,
+        },
 };
 
 static struct pm8029_led_config pm_led_config[] = {
-	{
-		.name = "green",
-		.bank = 0,
-		.init_pwm_brightness = 200,
-		.flag = FIX_BRIGHTNESS,
-	},
-	{
-		.name = "amber",
-		.bank = 4,
-		.init_pwm_brightness = 200,
-		.flag = FIX_BRIGHTNESS,
-	},
+        {
+                .name = "green",
+                .bank = 0,
+                .init_pwm_brightness = 200,
+                .flag = FIX_BRIGHTNESS,
+        },
+        {
+                .name = "amber",
+                .bank = 4,
+                .init_pwm_brightness = 200,
+                .flag = FIX_BRIGHTNESS,
+        },
 
 };
 
 static struct pm8029_led_platform_data pm8029_leds_data = {
-	.led_config = pm_led_config,
-	.num_leds = ARRAY_SIZE(pm_led_config),
+        .led_config = pm_led_config,
+        .num_leds = ARRAY_SIZE(pm_led_config),
 };
 
 static struct platform_device pm8029_leds = {
-	.name   = "leds-pm8029",
-	.id     = -1,
-	.dev    = {
-		.platform_data  = &pm8029_leds_data,
-	},
+        .name   = "leds-pm8029",
+        .id     = -1,
+        .dev    = {
+                .platform_data  = &pm8029_leds_data,
+        },
 };
-
-/* HTC_HEADSET_GPIO Driver */
 static struct htc_headset_gpio_platform_data htc_headset_gpio_data = {
 	.hpin_gpio		= PROTOU_AUD_HP_INz,
 	.key_enable_gpio	= 0,
@@ -1259,7 +1274,6 @@ static struct platform_device htc_headset_gpio = {
 	},
 };
 
-/* HTC_HEADSET_PMIC Driver */
 static struct htc_headset_pmic_platform_data htc_headset_pmic_data = {
 	.driver_flag		= DRIVER_HS_PMIC_RPC_KEY,
 	.hpin_gpio		= 0,
@@ -1297,12 +1311,11 @@ static struct platform_device htc_headset_one_wire = {
        },
 };
 
-/* HTC_HEADSET_MGR Driver */
 static struct platform_device *headset_devices[] = {
 	&htc_headset_pmic,
 	&htc_headset_gpio,
 	&htc_headset_one_wire,
-	/* Please put the headset detection driver on the last */
+	
 };
 
 static struct headset_adc_config htc_headset_mgr_config[] = {
@@ -1322,7 +1335,7 @@ static struct headset_adc_config htc_headset_mgr_config[] = {
 		.adc_min = 21582,
 	},
 	{
-		.type = HEADSET_NO_MIC, /* HEADSET_INDICATOR */
+		.type = HEADSET_NO_MIC, 
 		.adc_max = 21581,
 		.adc_min = 9045,
 	},
@@ -1381,7 +1394,7 @@ static void headset_init(void)
 		ret = gpio_tlmm_config(headset_cpu_gpio[i], GPIO_CFG_ENABLE);
 		pr_info("[HS_BOARD]Config gpio[%d], ret = %d\n", (headset_cpu_gpio[i] & 0x3FF0) >> 4, ret);
 	}
-	gpio_set_value(PROTOU_AUD_UART_OEz, 1); /*Disable 1-wire level shift by default*/
+	gpio_set_value(PROTOU_AUD_UART_OEz, 1); 
 	gpio_set_value(PROTOU_AUD_2V85_EN, 0);
 	gpio_set_value(PROTOU_AUD_UART_SEL, 0);
 }
@@ -1412,87 +1425,13 @@ static struct platform_device htc_headset_mgr = {
 	},
 };
 
-/* HEADSET DRIVER END */
 
-
-#define PM8058ADC_16BIT(adc) ((adc * 1800) / 65535) /* vref=2.2v, 16-bits resolution */
-int64_t protou_get_usbid_adc(void)
-{
-	uint32_t adc_value = 0xffffffff;
-	htc_get_usb_accessory_adc_level(&adc_value);
-	adc_value = PM8058ADC_16BIT(adc_value);
-	return adc_value;
-}
-
-static uint32_t usb_ID_PIN_input_table[] = {
-	GPIO_CFG(PROTOU_GPIO_USB_ID, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-};
-
-static uint32_t usb_ID_PIN_ouput_table[] = {
-	GPIO_CFG(PROTOU_GPIO_USB_ID, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA),
-};
-
-
-static void config_usb_id_table(uint32_t *table, int len)
-{
-	int n, rc;
-	for (n = 0; n < len; n++) {
-		rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
-		if (rc) {
-			pr_err("[CAM] %s: gpio_tlmm_config(%#x)=%d\n",
-				__func__, table[n], rc);
-			break;
-		}
-	}
-}
-
-void config_protou_usb_id_gpios(bool output)
-{
-	if (output) {
-		config_usb_id_table(usb_ID_PIN_ouput_table, ARRAY_SIZE(usb_ID_PIN_ouput_table));
-		gpio_set_value(42, 1);
-		printk(KERN_INFO "%s %d output high\n",  __func__, 42);
-	} else {
-		config_usb_id_table(usb_ID_PIN_input_table, ARRAY_SIZE(usb_ID_PIN_input_table));
-		printk(KERN_INFO "%s %d input none pull\n",  __func__, 42);
-	}
-}
-
-static struct cable_detect_platform_data cable_detect_pdata = {
-	.detect_type = CABLE_TYPE_PMIC_ADC,
-	.usb_id_pin_gpio = 42,
-	.config_usb_id_gpios = config_protou_usb_id_gpios,
-	.get_adc_cb		= protou_get_usbid_adc,
-};
-
-static struct platform_device cable_detect_device = {
-	.name	= "cable_detect",
-	.id	= -1,
-	.dev	= {
-		.platform_data = &cable_detect_pdata,
-	},
-};
-
-static struct resource ram_console_resources[] = {
-	{
-		.start  = MSM_RAM_CONSOLE_BASE,
-		.end    = MSM_RAM_CONSOLE_BASE + MSM_RAM_CONSOLE_SIZE - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-};
-
-static struct platform_device ram_console_device = {
-	.name           = "ram_console",
-	.id             = -1,
-	.num_resources  = ARRAY_SIZE(ram_console_resources),
-	.resource       = ram_console_resources,
-};
 
 static struct platform_device *msm7627a_surf_ffa_devices[] __initdata = {
 	&msm_device_dmov,
 	&msm_device_smd,
 	&msm_device_uart1,
-#if 0//config by BT
+#if 0
 	&msm_device_uart_dm1,
 #endif
 	&msm_device_uart_dm2,
@@ -1507,25 +1446,30 @@ static struct platform_device *common_devices[] __initdata = {
 	&android_pmem_device,
 	&android_pmem_adsp_device,
 	&android_pmem_audio_device,
-	&android_pmem_adsp2_device,
-	&msm_device_nand,
+	&fmem_device,
+	
+	
 	&msm_device_snd,
+	&msm_device_cad,
 	&msm_device_adspdec,
 	&asoc_msm_pcm,
 	&asoc_msm_dai0,
 	&asoc_msm_dai1,
-	&msm_adc_device,
 #ifdef CONFIG_BATTERY_MSM
 	&msm_batt_device,
 #endif
+	&msm_adc_device,
 	&htc_battery_pdev,
 	&ds2746_battery_pdev,
 	&pm8029_leds,
 	&gpio_leds,
 	&htc_headset_mgr,
 	&cable_detect_device,
-#if defined(CONFIG_MSM_RTB)
-	&msm_rtb_device,
+#ifdef CONFIG_ION_MSM
+	&ion_dev,
+#endif
+#ifdef CONFIG_PERFLOCK
+	&msm7x27a_device_perf_lock,
 #endif
 };
 
@@ -1533,7 +1477,7 @@ static struct platform_device *msm8625_surf_devices[] __initdata = {
 	&ram_console_device,
 	&msm8625_device_dmov,
 	&msm8625_device_uart1,
-#if 0//config by BT
+#if 0
 	&msm8625_device_uart_dm1,
 #endif
 	&msm8625_device_uart_dm2,
@@ -1560,6 +1504,82 @@ static int __init pmem_audio_size_setup(char *p)
 }
 early_param("pmem_audio_size", pmem_audio_size_setup);
 
+static void fix_sizes(void)
+{
+#if 0
+	if (machine_is_msm7625a_surf() || machine_is_msm7625a_ffa()) {
+		pmem_mdp_size = MSM7x25A_MSM_PMEM_MDP_SIZE;
+		pmem_adsp_size = MSM7x25A_MSM_PMEM_ADSP_SIZE;
+	} else {
+		pmem_mdp_size = MSM_PMEM_MDP_SIZE;
+		pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
+	}
+#else
+	pmem_mdp_size = MSM_PMEM_MDP_SIZE;
+	pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
+#endif
+	if (get_ddr_size() > SZ_512M)
+		pmem_adsp_size = CAMERA_ZSL_SIZE;
+#ifdef CONFIG_ION_MSM
+	msm_ion_camera_size = pmem_adsp_size;
+	msm_ion_audio_size = (MSM_PMEM_AUDIO_SIZE + PMEM_KERNEL_EBI1_SIZE);
+	msm_ion_sf_size = pmem_mdp_size;
+#endif
+}
+
+#ifdef CONFIG_ION_MSM
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+static struct ion_co_heap_pdata co_ion_pdata = {
+	.adjacent_mem_id = INVALID_HEAP_ID,
+	.align = PAGE_SIZE,
+};
+#endif
+
+static struct ion_platform_data ion_pdata = {
+	.nr = MSM_ION_HEAP_NUM,
+	.has_outer_cache = 1,
+	.heaps = {
+		{
+			.id	= ION_SYSTEM_HEAP_ID,
+			.type	= ION_HEAP_TYPE_SYSTEM,
+			.name	= ION_VMALLOC_HEAP_NAME,
+		},
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+		
+		{
+			.id	= ION_CAMERA_HEAP_ID,
+			.type	= ION_HEAP_TYPE_CARVEOUT,
+			.name	= ION_CAMERA_HEAP_NAME,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *)&co_ion_pdata,
+		},
+		
+		{
+			.id	= ION_AUDIO_HEAP_ID,
+			.type	= ION_HEAP_TYPE_CARVEOUT,
+			.name	= ION_AUDIO_HEAP_NAME,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *)&co_ion_pdata,
+		},
+		
+		{
+			.id	= ION_SF_HEAP_ID,
+			.type	= ION_HEAP_TYPE_CARVEOUT,
+			.name	= ION_SF_HEAP_NAME,
+			.memory_type = ION_EBI_TYPE,
+			.extra_data = (void *)&co_ion_pdata,
+		},
+#endif
+	}
+};
+
+static struct platform_device ion_dev = {
+	.name = "ion-msm",
+	.id = 1,
+	.dev = { .platform_data = &ion_pdata },
+};
+#endif
+
 static struct memtype_reserve msm7x27a_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
 	},
@@ -1571,54 +1591,95 @@ static struct memtype_reserve msm7x27a_reserve_table[] __initdata = {
 	},
 };
 
+#ifdef CONFIG_ANDROID_PMEM
+#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
+static struct android_pmem_platform_data *pmem_pdata_array[] __initdata = {
+		&android_pmem_adsp_pdata,
+		&android_pmem_audio_pdata,
+		&android_pmem_pdata,
+};
+#endif
+#endif
+
 static void __init size_pmem_devices(void)
 {
-	pmem_mdp_size = MSM_PMEM_MDP_SIZE;
-	pmem_adsp_size = MSM_PMEM_ADSP_SIZE;
-	pmem_adsp2_size = MSM_PMEM_ADSP2_SIZE;
-
 #ifdef CONFIG_ANDROID_PMEM
+#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
+	unsigned int i;
+	unsigned int reusable_count = 0;
+
 	android_pmem_adsp_pdata.size = pmem_adsp_size;
-	android_pmem_adsp2_pdata.size = pmem_adsp2_size;
 	android_pmem_pdata.size = pmem_mdp_size;
 	android_pmem_audio_pdata.size = pmem_audio_size;
+
+	fmem_pdata.size = 0;
+	fmem_pdata.align = PAGE_SIZE;
+
+	for (i = 0; i < ARRAY_SIZE(pmem_pdata_array); ++i) {
+		struct android_pmem_platform_data *pdata = pmem_pdata_array[i];
+
+		if (!reusable_count && pdata->reusable)
+			fmem_pdata.size += pdata->size;
+
+		reusable_count += (pdata->reusable) ? 1 : 0;
+
+		if (pdata->reusable && reusable_count > 1) {
+			pr_err("%s: Too many PMEM devices specified as reusable. PMEM device %s was not configured as reusable.\n",
+				__func__, pdata->name);
+			pdata->reusable = 0;
+		}
+	}
+#endif
 #endif
 }
 
-static void __init reserve_rtb_memory(void)
-{
-#if defined(CONFIG_MSM_RTB)
-	// need to add align the with rtb size
-	unsigned int size;
-	unsigned int rtb_align_size;
-	size = SZ_128K;
-	rtb_align_size = ALIGN(size, SZ_4K);
-	//msm7627a_reserve_table[MEMTYPE_EBI1].size += msm_rtb_pdata.size;
-	msm7x27a_reserve_table[MEMTYPE_EBI1].size += rtb_align_size;
-#endif
-}
-
+#ifdef CONFIG_ANDROID_PMEM
+#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
 static void __init reserve_memory_for(struct android_pmem_platform_data *p)
 {
 	msm7x27a_reserve_table[p->memory_type].size += p->size;
 }
+#endif
+#endif
 
 static void __init reserve_pmem_memory(void)
 {
 #ifdef CONFIG_ANDROID_PMEM
-	reserve_memory_for(&android_pmem_adsp_pdata);
-	reserve_memory_for(&android_pmem_adsp2_pdata);
-	reserve_memory_for(&android_pmem_pdata);
-	reserve_memory_for(&android_pmem_audio_pdata);
+#ifndef CONFIG_MSM_MULTIMEDIA_USE_ION
+	unsigned int i;
+	for (i = 0; i < ARRAY_SIZE(pmem_pdata_array); ++i)
+		reserve_memory_for(pmem_pdata_array[i]);
+
 	msm7x27a_reserve_table[MEMTYPE_EBI1].size += pmem_kernel_ebi1_size;
+#endif
+#endif
+}
+
+static void __init size_ion_devices(void)
+{
+#ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
+	ion_pdata.heaps[1].size = msm_ion_camera_size;
+	ion_pdata.heaps[2].size = msm_ion_audio_size;
+	ion_pdata.heaps[3].size = msm_ion_sf_size;
+#endif
+}
+
+static void __init reserve_ion_memory(void)
+{
+#if defined(CONFIG_ION_MSM) && defined(CONFIG_MSM_MULTIMEDIA_USE_ION)
+	msm7x27a_reserve_table[MEMTYPE_EBI1].size += msm_ion_camera_size;
+	msm7x27a_reserve_table[MEMTYPE_EBI1].size += msm_ion_audio_size;
+	msm7x27a_reserve_table[MEMTYPE_EBI1].size += msm_ion_sf_size;
 #endif
 }
 
 static void __init msm7x27a_calculate_reserve_sizes(void)
 {
+	fix_sizes();
 	size_pmem_devices();
 	reserve_pmem_memory();
-	reserve_rtb_memory();
+	size_ion_devices();
+	reserve_ion_memory();
 }
 
 static int msm7x27a_paddr_to_memtype(unsigned int paddr)
@@ -1641,10 +1702,16 @@ static void __init msm7x27a_reserve(void)
 static void __init msm8625_reserve(void)
 {
 	msm7x27a_reserve();
-	memblock_remove(MSM8625_SECONDARY_PHYS, SZ_8);
+	memblock_remove(MSM8625_CPU_PHYS, SZ_8);
 	memblock_remove(MSM8625_WARM_BOOT_PHYS, SZ_32);
 }
-
+#if 0
+static void __init msm7x27a_device_i2c_init(void)
+{
+	msm_gsbi0_qup_i2c_device.dev.platform_data = &msm_gsbi0_qup_i2c_pdata;
+	msm_gsbi1_qup_i2c_device.dev.platform_data = &msm_gsbi1_qup_i2c_pdata;
+}
+#endif
 static void __init msm8625_device_i2c_init(void)
 {
 	msm8625_gsbi0_qup_i2c_device.dev.platform_data =
@@ -1653,15 +1720,14 @@ static void __init msm8625_device_i2c_init(void)
 		&msm_gsbi1_qup_i2c_pdata;
 }
 
-/* Touch Panel */
-#define PRIMODS_GPIO_TP_ATT_N            (18)
-#define PRIMODS_V_TP_3V3_EN              (31)
-#define PRIMODS_GPIO_TP_RST_N            (120)
+#define PROTOU_GPIO_TP_ATT_N            (18)
+#define PROTOU_V_TP_3V3_EN              (31)
+#define PROTOU_GPIO_TP_RST_N            (120)
 
 static int msm8625_ts_himax_power(int on)
 {
 	printk(KERN_INFO "%s():\n", __func__);
-	gpio_set_value(PRIMODS_V_TP_3V3_EN, on);
+	gpio_set_value(PROTOU_V_TP_3V3_EN, on);
 
 	return 0;
 }
@@ -1669,9 +1735,9 @@ static int msm8625_ts_himax_power(int on)
 static void msm8625_ts_himax_reset(void)
 {
 	printk(KERN_INFO "%s():\n", __func__);
-	gpio_direction_output(PRIMODS_GPIO_TP_RST_N, 0);
+	gpio_direction_output(PROTOU_GPIO_TP_RST_N, 0);
 	mdelay(20);
-	gpio_direction_output(PRIMODS_GPIO_TP_RST_N, 1);
+	gpio_direction_output(PROTOU_GPIO_TP_RST_N, 1);
 	mdelay(50);
 }
 
@@ -1902,18 +1968,18 @@ struct himax_i2c_platform_data_config_type_2 config_type2[] = {
 	},
 };
 
-struct himax_i2c_platform_data msm7x27a_ts_himax_data = {
+struct himax_i2c_platform_data msm8625_ts_himax_data = {
 	.slave_addr = 0x90,
 	.abs_x_min = 0,
 	.abs_x_max = 1024,
 	.abs_y_min = 0,
-	.abs_y_max = 947,
+	.abs_y_max = 957,
 	.abs_pressure_min = 0,
 	.abs_pressure_max = 200,
 	.abs_width_min = 0,
 	.abs_width_max = 200,
-	.gpio_irq = PRIMODS_GPIO_TP_ATT_N,
-	.gpio_reset = PRIMODS_GPIO_TP_RST_N,
+	.gpio_irq = PROTOU_GPIO_TP_ATT_N,
+	.gpio_reset = PROTOU_GPIO_TP_RST_N,
 	.version = 0x00,
 	.tw_id = 0,
 	.event_htc_enable = 0,
@@ -1936,12 +2002,49 @@ struct himax_i2c_platform_data msm7x27a_ts_himax_data = {
 	.type3_size = sizeof(config_type3),
 };
 
+static struct i2c_board_info i2c_touch_device[] = {
+	{
+		I2C_BOARD_INFO(HIMAX8526A_NAME, 0x90>>1),
+		.platform_data  = &msm8625_ts_himax_data,
+		.irq = MSM_GPIO_TO_INT(PROTOU_GPIO_TP_ATT_N),
+	},
+};
+
+
+static ssize_t msm8625_virtual_keys_show(struct kobject *kobj,
+			struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf,
+		__stringify(EV_KEY) ":" __stringify(KEY_BACK)	    ":54:853:117:90"
+		":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":245:857:97:90"
+		":" __stringify(EV_KEY) ":" __stringify(KEY_APP_SWITCH) ":411:856:101:90"
+		"\n");
+}
+static struct kobj_attribute msm8625_himax_virtual_keys_attr = {
+	.attr = {
+		.name = "virtualkeys.himax-touchscreen",
+		.mode = S_IRUGO,
+	},
+	.show = &msm8625_virtual_keys_show,
+};
+
+static struct attribute *msm8625_properties_attrs[] = {
+	&msm8625_himax_virtual_keys_attr.attr,
+	NULL
+};
+
+static struct attribute_group msm8625_properties_attr_group = {
+	.attrs = msm8625_properties_attrs,
+};
+
+int msm8625_init_keypad(void);
+
 #ifdef CONFIG_FLASHLIGHT_TPS61310
 #ifdef CONFIG_MSM_CAMERA_FLASH
 int flashlight_control(int mode)
 {
 	int	rc;
-	/* Andrew_Cheng Turn off backlight when flash on */
+	
 	static int	backlight_off = 0;
 
 	if (mode != FL_MODE_PRE_FLASH && mode != FL_MODE_OFF) {
@@ -1989,43 +2092,6 @@ static struct i2c_board_info i2c_tps61310_flashlight[] = {
 };
 #endif
 
-static struct i2c_board_info i2c_touch_device[] = {
-	{
-		I2C_BOARD_INFO(HIMAX8526A_NAME, 0x90>>1),
-		.platform_data  = &msm7x27a_ts_himax_data,
-		.irq = MSM_GPIO_TO_INT(PRIMODS_GPIO_TP_ATT_N),
-	},
-};
-
-
-static ssize_t msm8625_virtual_keys_show(struct kobject *kobj,
-			struct kobj_attribute *attr, char *buf)
-{
-	return sprintf(buf,
-		__stringify(EV_KEY) ":" __stringify(KEY_BACK)	    ":74:853:97:65"
-		":" __stringify(EV_KEY) ":" __stringify(KEY_HOME)   ":245:857:97:65"
-		":" __stringify(EV_KEY) ":" __stringify(KEY_APP_SWITCH) ":411:856:101:65"
-		"\n");
-}
-static struct kobj_attribute msm8625_himax_virtual_keys_attr = {
-	.attr = {
-		.name = "virtualkeys.himax-touchscreen",
-		.mode = S_IRUGO,
-	},
-	.show = &msm8625_virtual_keys_show,
-};
-
-static struct attribute *msm8625_properties_attrs[] = {
-	&msm8625_himax_virtual_keys_attr.attr,
-	NULL
-};
-
-static struct attribute_group msm8625_properties_attr_group = {
-	.attrs = msm8625_properties_attrs,
-};
-
-int msm8625_init_keypad(void);
-
 #define MSM_EBI2_PHYS			0xa0d00000
 #define MSM_EBI2_XMEM_CS2_CFG1		0xa0d10030
 
@@ -2040,13 +2106,13 @@ static void __init msm7x27a_init_ebi2(void)
 
 	ebi2_cfg = readl(ebi2_cfg_ptr);
 	if (machine_is_msm7x27a_rumi3() || machine_is_msm7x27a_surf() ||
-		machine_is_msm7625a_surf() || machine_is_msm8625_surf() || machine_is_protou() || machine_is_protodug() || machine_is_magnids() || machine_is_protodcg())
-		ebi2_cfg |= (1 << 4); /* CS2 */
+		machine_is_msm7625a_surf() || machine_is_msm8625_surf() || machine_is_protou() || 0 || 0 || 0)
+		ebi2_cfg |= (1 << 4); 
 
 	writel(ebi2_cfg, ebi2_cfg_ptr);
 	iounmap(ebi2_cfg_ptr);
 
-	/* Enable A/D MUX[bit 31] from EBI2_XMEM_CS2_CFG1 */
+	
 	ebi2_cfg_ptr = ioremap_nocache(MSM_EBI2_XMEM_CS2_CFG1,
 							 sizeof(uint32_t));
 	if (!ebi2_cfg_ptr)
@@ -2091,7 +2157,10 @@ static void msm_adsp_add_pdev(void)
 	}
 }
 
-#if 0//defined(CONFIG_BT) && defined(CONFIG_MARIMBA_CORE)
+#if 0 
+#define UART1DM_RX_GPIO		45
+#endif
+#if 0
 static int __init msm7x27a_init_ar6000pm(void)
 {
 	msm_wlan_ar6000_pm_device.dev.platform_data = &ar600x_wlan_power;
@@ -2117,7 +2186,7 @@ static void __init msm7x27a_add_footswitch_devices(void)
 
 static void __init msm7x27a_add_platform_devices(void)
 {
-	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa() || machine_is_protou() || machine_is_protodug() || machine_is_magnids() || machine_is_protodcg()) {
+	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa() || machine_is_protou() || 0 || 0 || 0) {
 		platform_add_devices(msm8625_surf_devices,
 			ARRAY_SIZE(msm8625_surf_devices));
 	} else {
@@ -2132,7 +2201,7 @@ static void __init msm7x27a_add_platform_devices(void)
 static void __init msm7x27a_uartdm_config(void)
 {
 	msm7x27a_cfg_uart2dm_serial();
-#if 0//UART1DM config by BT
+#if 0
 	msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(UART1DM_RX_GPIO);
 	if (cpu_is_msm8625())
 		msm8625_device_uart_dm1.dev.platform_data =
@@ -2146,17 +2215,15 @@ static void __init msm7x27a_uartdm_config(void)
 static void __init msm7x27a_otg_gadget(void)
 {
 	if (cpu_is_msm8625()) {
-#if 0
+#if 1
 		msm_otg_pdata.swfi_latency =
 		msm8625_pm_data[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].latency;
 #endif
 		msm8625_device_otg.dev.platform_data = &msm_otg_pdata;
-		android_usb_pdata.swfi_latency =
-		msm8625_pm_data[MSM_PM_SLEEP_MODE_WAIT_FOR_INTERRUPT].latency;
 		msm8625_device_gadget_peripheral.dev.platform_data =
 			&msm_gadget_pdata;
 	} else {
-#if 0
+#if 1
 		msm_otg_pdata.swfi_latency =
 		msm7x27a_pm_data[
 		MSM_PM_SLEEP_MODE_RAMP_DOWN_AND_WAIT_FOR_INTERRUPT].latency;
@@ -2169,11 +2236,12 @@ static void __init msm7x27a_otg_gadget(void)
 
 static void __init msm7x27a_pm_init(void)
 {
-	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa() || machine_is_protou() || machine_is_protodug() || machine_is_magnids() || machine_is_protodcg()) {
+	if (machine_is_msm8625_surf() || machine_is_msm8625_ffa() || machine_is_protou() || 0 || 0 || 0) {
 		msm_pm_set_platform_data(msm8625_pm_data,
 				ARRAY_SIZE(msm8625_pm_data));
 		BUG_ON(msm_pm_boot_init(&msm_pm_8625_boot_pdata));
 		msm8x25_spm_device_init();
+		msm_pm_register_cpr_ops();
 	} else {
 		msm_pm_set_platform_data(msm7x27a_pm_data,
 				ARRAY_SIZE(msm7x27a_pm_data));
@@ -2187,37 +2255,22 @@ static void proto_reset(void)
 {
 	gpio_set_value(PROTOU_GPIO_PS_HOLD, 0);
 }
-
-unsigned int *cpu_foot_print = CPU_FOOT_PRINT;
-
-
 static void __init msm7x2x_init(void)
 {
 	struct proc_dir_entry *entry = NULL;
 	int rc = 0;
 	struct kobject *properties_kobj;
-
+	int status;
 	msm_hw_reset_hook = proto_reset;
 
 	msm7x2x_misc_init();
 
-#ifdef CONFIG_PERFLOCK
-	perflock_init(&msm7x27a_perflock_data);
-	cpufreq_ceiling_init(&msm7x27a_cpufreq_ceiling_data);
-#ifdef CONFIG_PERFLOCK_SCREEN_POLICY
-	/* Init screen off policy perflocks */
-	perf_lock_init_v2(&screen_off_ceiling_lock,
-			   CEILING_LEVEL_HIGHEST,
-			   "screen_off_scaling_max");
-	perflock_screen_policy_init(&msm7x27a_screen_off_policy);
-#endif /* CONFIG_PERFLOCK_SCREEN_POLICY */
-#endif
-	/* Initialize regulators first so that other devices can use them */
+	
 	msm7x27a_init_regulators();
 	msm_adsp_add_pdev();
 	msm8625_device_i2c_init();
 	msm7x27a_init_ebi2();
-	/*msm7x27a_uartdm_config();*/
+	
 
 	msm7x27a_otg_gadget();
 
@@ -2229,27 +2282,34 @@ static void __init msm7x2x_init(void)
 	msm7x27a_add_platform_devices();
 
 #ifdef CONFIG_SERIAL_MSM_HS
-	if (system_rev == 0) {  //XA
-		printk(KERN_INFO "bt check system_rev: %d\n", system_rev);
-		msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(PROTOU_GPIO_BT_HOST_WAKE_XA);
-		msm_uart_dm1_pdata.host_wakeup_pin = PROTOU_GPIO_BT_HOST_WAKE_XA;
+	printk(KERN_INFO "bt check system_rev: %d\n", system_rev);
+	if (system_rev == 0) {  
+	        msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(PROTOU_GPIO_BT_HOST_WAKE_XA);
+	        msm_uart_dm1_pdata.host_wakeup_pin = PROTOU_GPIO_BT_HOST_WAKE_XA;
 	} else {
 		msm_uart_dm1_pdata.wakeup_irq = gpio_to_irq(PROTOU_GPIO_BT_HOST_WAKE_XC);
 		msm_uart_dm1_pdata.host_wakeup_pin = PROTOU_GPIO_BT_HOST_WAKE_XC;
 	}
-	//msm_device_uart_dm1.name = "msm_serial_hs_brcm"; /* for brcm */
-	//msm_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
-	msm8625_device_uart_dm1.name = "msm_serial_hs_brcm"; /* for brcm */
+	
+	
+	msm8625_device_uart_dm1.name = "msm_serial_hs_brcm"; 
 	msm8625_device_uart_dm1.dev.platform_data = &msm_uart_dm1_pdata;
 #endif
+
 #ifdef CONFIG_BT
 	bt_export_bd_address();
 	platform_device_register(&protou_rfkill);
-	//platform_device_register(&msm_device_uart_dm1);
 	platform_device_register(&msm8625_device_uart_dm1);
 #endif
 
-	/* Ensure ar6000pm device is registered before MMC/SDC */
+#ifdef CONFIG_PERFLOCK_SCREEN_POLICY
+	
+	perf_lock_init(&screen_off_ceiling_lock, TYPE_CPUFREQ_CEILING,
+					PERF_LOCK_LOW, "screen_off_scaling_max");
+	perflock_screen_policy_init(&msm7x27a_screen_off_policy);
+#endif
+
+	
 	msm7x27a_init_ar6000pm();
 
 #ifdef CONFIG_MMC_MSM
@@ -2266,69 +2326,58 @@ static void __init msm7x2x_init(void)
 		printk(KERN_ERR"Create /proc/dying_processes FAILED!\n");
 
 #endif
-//	msm_fb_add_devices();
-//	printk(KERN_ERR "%s: msm_fb_add_devices\n", __func__);
-	/*ProtoU display initializations*/
+
+	
 	protou_init_panel();
 	printk(KERN_ERR "%s: protou_init_panel\n", __func__);
 
 	msm7x2x_init_host();
 	printk(KERN_ERR "%s: msm7x2x_init_host\n", __func__);
-
 	msm7x27a_pm_init();
 	printk(KERN_ERR "%s: msm7x27a_pm_init\n", __func__);
 	register_i2c_devices();
 	printk(KERN_ERR "%s: register_i2c_devices\n", __func__);
 
-	//msm7627a_bt_power_init();
+	
 	protou_camera_init();
-	//msm7627a_add_io_devices();
-	/*7x25a kgsl initializations*/
-	//msm7x25a_kgsl_3d0_init();
-	/*8x25 kgsl initializations*/
-	if(board_mfg_mode() != 4)
-		msm8x25_kgsl_3d0_init();
-	/* FIXME: board_mfg_mode is not ready yet */
-#if 0
-        /*usb driver won't be loaded in MFG 58 station and gift mode*/
-        if (!(board_mfg_mode() == 6 || board_mfg_mode() == 7))
-#endif
-		protou_add_usb_devices();
-
-
+	
+	
+	
+	
+	msm8x25_kgsl_3d0_init();
+	protou_add_usb_devices();
 #if defined(CONFIG_INPUT_CAPELLA_CM3629)
 #define GPIO_PS_2V8 58
-	{
-    int status;
+
+
 	status = gpio_request(GPIO_PS_2V8, "PS_2V85_EN");
-    if (status) {
-            pr_err("%s:Failed to request GPIO %d\n", __func__,
-                            GPIO_PS_2V8);
-    } else {
-            status = gpio_direction_output(GPIO_PS_2V8,1);
-            pr_info("PS_2V85 status = %d\n",status);
-            if (!status)
-                    status = gpio_get_value(GPIO_PS_2V8);
-            gpio_free(GPIO_PS_2V8);
-            pr_info("PS_2V85 status = %d\n",status);
-    }
+	if (status) {
+	pr_err("%s:Failed to request GPIO %d\n", __func__, GPIO_PS_2V8);
+	} else {
+		status = gpio_direction_output(GPIO_PS_2V8,1);
+		pr_info("PS_2V85 status = %d\n",status);
+		if (!status)
+			status = gpio_get_value(GPIO_PS_2V8);
+		gpio_free(GPIO_PS_2V8);
+		pr_info("PS_2V85 status = %d\n",status);
+	}
 
 	status = gpio_request(PROTOU_GPIO_PROXIMITY_INT, "PS_INT");
 	if (status) {
 		pr_err("%s: Failed to request GPIO %d\n", __func__,PROTOU_GPIO_PROXIMITY_INT);
 	} else {
 		status = gpio_tlmm_config(GPIO_CFG(PROTOU_GPIO_PROXIMITY_INT, 0,
-				GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
-				GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+			GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
+			GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 		pr_info("PROTOU_GPIO_PROXIMITY_INT status = %d\n",status);
-        gpio_free(PROTOU_GPIO_PROXIMITY_INT);
+	gpio_free(PROTOU_GPIO_PROXIMITY_INT);
 	}
 
 	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
-			i2c_cm36282_devices, ARRAY_SIZE(i2c_cm36282_devices));
-	}
+		i2c_cm36282_devices, ARRAY_SIZE(i2c_cm36282_devices));
+
 #endif
-	printk(KERN_ERR "%s: end\n", __func__);
+
 	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
 				i2c_touch_device,
 				ARRAY_SIZE(i2c_touch_device));
@@ -2338,58 +2387,49 @@ static void __init msm7x2x_init(void)
 
 	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
 			i2c_bma250_devices, ARRAY_SIZE(i2c_bma250_devices));
-
 	properties_kobj = kobject_create_and_add("board_properties", NULL);
 	if (properties_kobj)
 		rc = sysfs_create_group(properties_kobj,
 						&msm8625_properties_attr_group);
 	if (!properties_kobj || rc)
 		printk(KERN_ERR "[TP]failed to create board_properties\n");
-	msm_init_pmic_vibrator(3000);
+	else {
+		msm8625_ts_himax_data.vk_obj = properties_kobj;
+		msm8625_ts_himax_data.vk2Use = &msm8625_himax_virtual_keys_attr;
+	}
 
 	i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
 			i2c_tps65200_devices, ARRAY_SIZE(i2c_tps65200_devices));
-
+        msm_init_pmic_vibrator(3000);
 	msm8625_init_keypad();
 	protou_wifi_init();
 
-	if (get_kernel_flag() & KERNEL_FLAG_PM_MONITOR) {
+	
 		htc_monitor_init();
 		htc_PM_monitor_init();
-	}
-	*(cpu_foot_print + 0) = 0xaabbccaa;
-	*(cpu_foot_print + 1) = 0xaabbccaa;
-	*(cpu_foot_print + 2) = 0xaabbccaa;
-	*(cpu_foot_print + 3) = 0xaabbccaa;
+	
 }
 
-static unsigned int radio_security = 0;
 
-static void __init protou_fixup(struct machine_desc *desc, struct tag *tags,
-					char **cmdline, struct meminfo *mi)
+static void __init protou_fixup(struct tag *tags, char **cmdline, struct meminfo *mi)
 {
-	radio_security = parse_tag_security((const struct tag *)tags);
-	printk(KERN_INFO "%s: security_atag=0x%x\n", __func__, radio_security);
 
 	mi->nr_banks = 2;
 	mi->bank[0].start = 0x03200000;
 	mi->bank[0].size = 0x0CE00000;
 	mi->bank[1].start = 0x10000000;
 
-	/*Not reserve 20MB for QXDM log if radio security on or radio flag & 0x08000000 is ture*/
-	if (radio_security & 0x1)
+	
 		mi->bank[1].size = 0x1FB00000;
-	else
-		mi->bank[1].size = 0x1E700000;
 }
 
 static void __init msm7x2x_init_early(void)
 {
-	//msm_msm7627a_allocate_memory_regions();
+	
 }
 
 MACHINE_START(PROTOU, "protou")
-	.boot_params	= PHYS_OFFSET + 0x100,
+	.atag_offset	= PHYS_OFFSET + 0x100,
 	.fixup = protou_fixup,
 	.map_io		= msm8625_map_io,
 	.reserve	= msm8625_reserve,
@@ -2399,25 +2439,5 @@ MACHINE_START(PROTOU, "protou")
 	.init_early     = msm7x2x_init_early,
 	.handle_irq	= gic_handle_irq,
 MACHINE_END
-MACHINE_START(PROTODUG, "protodug")
-	.boot_params	= PHYS_OFFSET + 0x100,
-	.fixup = protou_fixup,
-	.map_io		= msm8625_map_io,
-	.reserve	= msm8625_reserve,
-	.init_irq	= msm8625_init_irq,
-	.init_machine	= msm7x2x_init,
-	.timer		= &msm_timer,
-	.init_early     = msm7x2x_init_early,
-	.handle_irq	= gic_handle_irq,
-MACHINE_END
-MACHINE_START(MAGNIDS, "magnids")
-	.boot_params	= PHYS_OFFSET + 0x100,
-	.fixup = protou_fixup,
-	.map_io		= msm8625_map_io,
-	.reserve	= msm8625_reserve,
-	.init_irq	= msm8625_init_irq,
-	.init_machine	= msm7x2x_init,
-	.timer		= &msm_timer,
-	.init_early     = msm7x2x_init_early,
-	.handle_irq	= gic_handle_irq,
-MACHINE_END
+
+

@@ -67,6 +67,10 @@ struct msm_camera_device_platform_data {
 	uint8_t is_ispif;
 	uint8_t is_vpe;
 	struct msm_bus_scale_pdata *cam_bus_scale_table;
+#if 1	
+	int (*camera_csi_on) (void);
+	int (*camera_csi_off) (void);
+#endif	
 };
 enum msm_camera_csi_data_format {
 	CSI_8BIT,
@@ -79,9 +83,9 @@ struct msm_camera_csi_params {
 	uint8_t lane_assign;
 	uint8_t settle_cnt;
 	uint8_t dpcm_scheme;
-	/* HTC_START */
+	
 	uint8_t dt;
-	/* HTC_END */
+	
 };
 
 #ifdef CONFIG_SENSORS_MT9T013
@@ -128,9 +132,15 @@ struct msm_camera_sensor_flash_current_driver {
 	const struct pmic8058_leds_platform_data *driver_channel;
 };
 
+enum msm_camera_ext_led_flash_id {
+	MAM_CAMERA_EXT_LED_FLASH_SC628A,
+	MAM_CAMERA_EXT_LED_FLASH_TPS61310,
+};
+
 struct msm_camera_sensor_flash_external {
 	uint32_t led_en;
 	uint32_t led_flash_en;
+	enum msm_camera_ext_led_flash_id flash_id;
 	struct msm_cam_expander_info *expander_info;
 };
 
@@ -141,9 +151,9 @@ struct msm_camera_sensor_flash_led {
 
 struct msm_camera_sensor_flash_src {
 	int flash_sr_type;
-	//HTC_START
+	
 	int (*camera_flash)(int level);
-	//HTC_END
+	
 	union {
 		struct msm_camera_sensor_flash_pmic pmic_src;
 		struct msm_camera_sensor_flash_pwm pwm_src;
@@ -160,7 +170,6 @@ struct msm_camera_sensor_flash_data {
 	struct msm_camera_sensor_flash_src *flash_src;
 };
 
-/* HTC_START Andrew_Cheng linear led 20111205 MB*/
 struct camera_led_info {
 	uint16_t enable;
 	uint16_t low_limit_led_state;
@@ -181,21 +190,20 @@ struct camera_flash_info {
 	struct camera_led_info *led_info;
 	struct camera_led_est *led_est_table;
 };
-/* HTC_END Andrew_Cheng linear led 20111205 ME*/
 
 struct camera_flash_cfg {
 	int num_flash_levels;
 	int (*camera_flash)(int level);
 	uint16_t low_temp_limit;
 	uint16_t low_cap_limit;
+	uint16_t low_cap_limit_dual;
 	uint8_t postpone_led_mode;
-	struct camera_flash_info *flash_info;	/* HTC Andrew_Cheng linear led 20111205 */
+	struct camera_flash_info *flash_info;	
 };
-/* HTC_END */
 
 struct msm_camera_sensor_strobe_flash_data {
 	uint8_t flash_trigger;
-	uint8_t flash_charge; /* pin for charge */
+	uint8_t flash_charge; 
 	uint8_t flash_charge_done;
 	uint32_t flash_recharge_duration;
 	uint32_t irq;
@@ -204,7 +212,6 @@ struct msm_camera_sensor_strobe_flash_data {
 	int state;
 };
 
-/* HTC_START */
 struct msm_camera_rawchip_info {
 	int rawchip_reset;
 	int rawchip_intr0;
@@ -214,10 +221,19 @@ struct msm_camera_rawchip_info {
 	int (*camera_rawchip_power_on)(void);
 	int (*camera_rawchip_power_off)(void);
 	int (*rawchip_use_ext_1v2)(void);
-	int (*rawchip_gpio_on)(void);
-	void (*rawchip_gpio_off)(void);
 };
-/* HTC_END */
+
+enum rawchip_enable_type {
+	RAWCHIP_DISABLE,
+	RAWCHIP_ENABLE,
+	RAWCHIP_DXO_BYPASS,
+	RAWCHIP_MIPI_BYPASS,
+};
+
+enum hdr_mode_type {
+	NON_HDR_MODE,
+	HDR_MODE,
+};
 
 enum msm_camera_type {
 	BACK_CAMERA_2D,
@@ -234,16 +250,15 @@ enum msm_sensor_type {
 enum camera_vreg_type {
 	REG_LDO,
 	REG_VS,
+	REG_GPIO,
 };
 
-/* HTC_START */
 enum sensor_flip_mirror_info {
 	CAMERA_SENSOR_NONE,
 	CAMERA_SENSOR_MIRROR,
 	CAMERA_SENSOR_FLIP,
 	CAMERA_SENSOR_MIRROR_FLIP,
 };
-/* HTC_END */
 
 struct camera_vreg_t {
 	char *reg_name;
@@ -278,6 +293,10 @@ struct msm_camera_gpio_conf {
 	uint8_t camera_off_table_size;
 	uint32_t *camera_on_table;
 	uint8_t camera_on_table_size;
+	
+	uint16_t *cam_gpio_tbl;
+	uint8_t cam_gpio_tbl_size;
+	
 };
 
 enum msm_camera_i2c_mux_mode {
@@ -292,6 +311,13 @@ struct msm_camera_i2c_conf {
 	enum msm_camera_i2c_mux_mode i2c_mux_mode;
 };
 
+enum msm_camera_pixel_order_default {
+	MSM_CAMERA_PIXEL_ORDER_GR,
+	MSM_CAMERA_PIXEL_ORDER_RG,
+	MSM_CAMERA_PIXEL_ORDER_BG,
+	MSM_CAMERA_PIXEL_ORDER_GB,
+};
+
 struct msm_camera_sensor_platform_info {
 	int mount_angle;
 	int sensor_reset;
@@ -301,9 +327,16 @@ struct msm_camera_sensor_platform_info {
 	struct msm_camera_gpio_conf *gpio_conf;
 	struct msm_camera_i2c_conf *i2c_conf;
 	struct msm_camera_csi_lane_params *csi_lane_params;
-	/* HTC_START */
+	
+	int sensor_reset_enable;
+	int sensor_pwd;
+	int vcm_pwd;
+	int vcm_enable;
+	int privacy_light;
+	enum msm_camera_pixel_order_default pixel_order_default;	
 	enum sensor_flip_mirror_info mirror_flip;
-	/* HTC_END */
+	void *privacy_light_info;
+	
 };
 
 enum msm_camera_actuator_name {
@@ -324,14 +357,20 @@ struct msm_actuator_info {
 	int bus_id;
 	int vcm_pwd;
 	int vcm_enable;
-	/* HTC_START */
+	
 	int use_rawchip_af;
-	/* HTC_END */
+	
 };
 
 struct msm_eeprom_info {
 	struct i2c_board_info const *board_info;
 	int bus_id;
+};
+
+enum htc_camera_image_type_board {
+	HTC_CAMERA_IMAGE_NONE_BOARD,
+	HTC_CAMERA_IMAGE_YUSHANII_BOARD,
+	HTC_CAMERA_IMAGE_MAX_BOARD,
 };
 
 struct msm_camera_sensor_info {
@@ -354,26 +393,31 @@ struct msm_camera_sensor_info {
 	char *eeprom_data;
 	enum msm_camera_type camera_type;
 	enum msm_sensor_type sensor_type;
+
+    uint16_t num_actuator_info_table;
+	struct msm_actuator_info **actuator_info_table;
+
 	struct msm_actuator_info *actuator_info;
 	int pmic_gpio_enable;
-	int (*sensor_lcd_gpio_onoff)(int on);
-	struct msm_eeprom_info *eeprom_info;
 
-	/* HTC_START */
+	
 	struct msm_camera_gpio_conf *gpio_conf;
 	int (*camera_power_on)(void);
 	int (*camera_power_off)(void);
+	enum htc_camera_image_type_board htc_image;	
 	int use_rawchip;
-#if 1 /* HTC to be removed */
-	/* HTC++ */
+	int hdr_mode;
+	int video_hdr_capability;
+#if 1 
+	
 	void(*camera_clk_switch)(void);
-	int power_down_disable; /* if close power */
-	int full_size_preview; /* if use full-size preview */
-	int cam_select_pin; /* for two sensors */
-	int mirror_mode; /* for sensor upside down */
-	int(*camera_pm8058_power)(int); /* for express */
+	int power_down_disable; 
+	int full_size_preview; 
+	int cam_select_pin; 
+	int mirror_mode; 
+	int(*camera_pm8058_power)(int); 
 	struct camera_flash_cfg* flash_cfg;
-	int gpio_set_value_force; /*true: force to set gpio  */
+	int gpio_set_value_force; 
 	int dev_node;
 	int camera_platform;
 	uint8_t led_high_enabled;
@@ -381,7 +425,7 @@ struct msm_camera_sensor_info {
 	uint32_t kpi_sensor_end;
 	uint8_t (*preview_skip_frame)(void);
 #endif
-	/* HTC_END */
+	
 };
 
 struct msm_camera_board_info {
@@ -403,11 +447,18 @@ struct msm_snd_endpoints {
 	unsigned num;
 };
 
+struct cad_endpoint {
+	int id;
+	const char *name;
+	uint32_t capability;
+};
+
+struct msm_cad_endpoints {
+	struct cad_endpoint *endpoints;
+	unsigned num;
+};
+
 #define MSM_MAX_DEC_CNT 14
-/* 7k target ADSP information */
-/* Bit 23:0, for codec identification like mp3, wav etc *
- * Bit 27:24, for mode identification like tunnel, non tunnel*
- * bit 31:28, for operation support like DM, DMA */
 enum msm_adspdec_concurrency {
 	MSM_ADSP_CODEC_WAV = 0,
 	MSM_ADSP_CODEC_ADPCM = 1,
@@ -423,6 +474,7 @@ enum msm_adspdec_concurrency {
 	MSM_ADSP_CODEC_AMRWB = 11,
 	MSM_ADSP_CODEC_EVRC = 12,
 	MSM_ADSP_CODEC_WMAPRO = 13,
+	MSM_ADSP_CODEC_AC3 = 23,
 	MSM_ADSP_MODE_TUNNEL = 24,
 	MSM_ADSP_MODE_NONTUNNEL = 25,
 	MSM_ADSP_MODE_LP = 26,
@@ -433,13 +485,10 @@ enum msm_adspdec_concurrency {
 struct msm_adspdec_info {
 	const char *module_name;
 	unsigned module_queueid;
-	int module_decid; /* objid */
+	int module_decid; 
 	unsigned nr_codec_support;
 };
 
-/* Carries information about number codec
- * supported if same codec or different codecs
- */
 struct dec_instance_table {
 	uint8_t max_instances_same_dec;
 	uint8_t max_instances_diff_dec;
@@ -448,8 +497,7 @@ struct dec_instance_table {
 struct msm_adspdec_database {
 	unsigned num_dec;
 	unsigned num_concurrency_support;
-	unsigned int *dec_concurrency_table; /* Bit masked entry to *
-					      *	represents codec, mode etc */
+	unsigned int *dec_concurrency_table; 
 	struct msm_adspdec_info  *dec_info_list;
 	struct dec_instance_table *dec_instance_list;
 };
@@ -474,38 +522,24 @@ struct msm_panel_common_pdata {
 	spinlock_t bl_spinlock;
 	int (*backlight_level)(int level, int max, int min);
 	int (*pmic_backlight)(int level);
+	int (*rotate_panel)(void);
+	int (*backlight) (int level, int mode);
 	int (*panel_num)(void);
 	void (*panel_config_gpio)(int);
 	int (*vga_switch)(int select_vga);
 	int *gpio_num;
-	int mdp_core_clk_rate;
-	unsigned num_mdp_clk;
-	int *mdp_core_clk_table;
-	int (*rgb_format)(void);
-	unsigned char (*shrink_pwm)(int val);
+	u32 mdp_max_clk;
 #ifdef CONFIG_MSM_BUS_SCALING
 	struct msm_bus_scale_pdata *mdp_bus_scale_table;
 #endif
 	int mdp_rev;
-	u32 ov0_wb_size;  /* overlay0 writeback size */
-	u32 ov1_wb_size;  /* overlay1 writeback size */
+	u32 ov0_wb_size;  
+	u32 ov1_wb_size;  
 	u32 mem_hid;
-	int (*writeback_offset)(void);
+	char cont_splash_enabled;
+	char mdp_iommu_split_domain;
 	int (*mdp_color_enhance)(void);
 	int (*mdp_gamma)(void);
-	void (*mdp_img_stick_wa)(bool);
-	unsigned long update_interval;
-	atomic_t img_stick_on;
-	struct panel_dcr_info *dcr_panel_pinfo;
-	unsigned int auto_bkl_stat;
-	int (*bkl_enable)(int);
-	char cont_splash_enabled;
-#ifdef CONFIG_FB_MSM8960
-	int (*acl_enable)(int);
-#else
-	int fpga_3d_config_addr;
-	struct gamma_curvy *abl_gamma_tbl;
-#endif
 };
 
 
@@ -541,6 +575,8 @@ struct mipi_dsi_platform_data {
 	int (*get_lane_config)(void);
 	char (*splash_is_enabled)(void);
 	int target_type;
+	char dlane_swap;
+	int (*lcd_pre_off)(struct platform_device *pdev);
 };
 
 enum mipi_dsi_3d_ctrl {
@@ -548,40 +584,33 @@ enum mipi_dsi_3d_ctrl {
 	FPGA_SPI_INTF,
 };
 
-#ifndef CONFIG_ARCH_MSM8625
-/* DSI PHY configuration */
-struct mipi_dsi_phy_ctrl {
-	uint32_t regulator[5];
-	uint32_t timing[12];
-	uint32_t ctrl[4];
-	uint32_t strength[4];
-	uint32_t pll[21];
-};
-#endif
 
 struct mipi_dsi_panel_platform_data {
 	int fpga_ctrl_mode;
 	int fpga_3d_config_addr;
 	int *gpio;
 	struct mipi_dsi_phy_ctrl *phy_ctrl_settings;
-	char dlane_swap;
 	void (*dsi_pwm_cfg)(void);
 	char enable_wled_bl_ctrl;
+	char dlane_swap;
 };
 
 struct lvds_panel_platform_data {
 	int *gpio;
 };
 
+struct msm_wfd_platform_data {
+	char (*wfd_check_mdp_iommu_split)(void);
+};
+
 #define PANEL_NAME_MAX_LEN 50
 struct msm_fb_platform_data {
 	int (*detect_client)(const char *name);
 	int mddi_prescan;
+	unsigned char ext_resolution;
 	int (*allow_set_offset)(void);
-	int blt_mode;
 	uint32_t width;
 	uint32_t height;
-	bool     is_3d_panel;
 	char prim_panel_name[PANEL_NAME_MAX_LEN];
 	char ext_panel_name[PANEL_NAME_MAX_LEN];
 };
@@ -593,14 +622,23 @@ struct msm_hdmi_platform_data {
 	int (*enable_5v)(int on);
 	int (*core_power)(int on, int show);
 	int (*cec_power)(int on);
+	int (*panel_power)(int on);
+	int (*gpio_config)(int on);
 	int (*init_irq)(void);
 	bool (*check_hdcp_hw_support)(void);
+	bool is_mhl_enabled;
 };
 
 struct msm_mhl_platform_data {
 	int irq;
-	int (*gpio_setup)(int on);
-	void (*reset_pin)(int on);
+	
+	uint32_t gpio_mhl_int;
+	
+	uint32_t gpio_mhl_reset;
+	
+	uint32_t gpio_mhl_power;
+	
+	uint32_t gpio_hdmi_mhl_mux;
 };
 
 struct msm_i2c_platform_data {
@@ -615,7 +653,6 @@ struct msm_i2c_platform_data {
 	int src_clk_rate;
 	int use_gsbi_shared_mode;
 	void (*msm_i2c_config_gpio)(int iface, int config_type);
-	int share_uart_flag;
 };
 
 struct msm_i2c_ssbi_platform_data {
@@ -629,10 +666,13 @@ struct msm_vidc_platform_data {
 	int disable_dmx;
 	int disable_fullhd;
 	u32 cp_enabled;
+	u32 secure_wb_heap;
 #ifdef CONFIG_MSM_BUS_SCALING
 	struct msm_bus_scale_pdata *vidc_bus_client_pdata;
 #endif
 	int cont_mode_dpb_count;
+	int disable_turbo;
+	unsigned long fw_addr;
 };
 
 struct vcap_platform_data {
@@ -647,14 +687,13 @@ struct isp1763_platform_data {
 	int (*setup_gpio)(int enable);
 };
 #endif
-/* common init routines for use by arch/arm/mach-msm/board-*.c */
 
 #ifdef CONFIG_OF_DEVICE
-void msm_copper_init(struct of_dev_auxdata **);
+void msm_8974_init(struct of_dev_auxdata **);
 #endif
 void msm_add_devices(void);
-void msm_copper_add_devices(void);
-void msm_copper_add_drivers(void);
+void msm_8974_add_devices(void);
+void msm_8974_add_drivers(void);
 void msm_map_common_io(void);
 void msm_map_qsd8x50_io(void);
 void msm_map_msm8x60_io(void);
@@ -663,14 +702,21 @@ void msm_map_msm8930_io(void);
 void msm_map_apq8064_io(void);
 void msm_map_msm7x30_io(void);
 void msm_map_fsm9xxx_io(void);
-void msm_map_copper_io(void);
+void msm_map_8974_io(void);
 void msm_map_msm8625_io(void);
+void msm_map_msm9625_io(void);
 void msm_init_irq(void);
-void msm_copper_init_irq(void);
+void msm_8974_init_irq(void);
 void vic_handle_irq(struct pt_regs *regs);
-void msm_copper_reserve(void);
-void msm_copper_very_early(void);
-void msm_copper_init_gpiomux(void);
+void msm_8974_reserve(void);
+void msm_8974_very_early(void);
+void msm_8974_init_gpiomux(void);
+
+#if defined(CONFIG_ARCH_MSM7X27)
+void msm_clk_dump_debug_info(void);
+#else
+static inline void msm_clk_dump_debug_info(void) {}
+#endif
 
 struct mmc_platform_data;
 int msm_add_sdcc(unsigned int controller,
@@ -681,10 +727,8 @@ struct msm_usb_host_platform_data;
 int msm_add_host(unsigned int host,
 		struct msm_usb_host_platform_data *plat);
 #if defined(CONFIG_USB_FUNCTION_MSM_HSUSB) \
-	|| defined(CONFIG_USB_MSM_72K) \
-	|| defined(CONFIG_USB_MSM_72K_MODULE) \
-	|| defined(CONFIG_USB_CI13XXX_MSM)
-int usb_get_connect_type(void);
+	|| defined(CONFIG_USB_MSM_72K) || defined(CONFIG_USB_MSM_72K_MODULE)
+void msm_hsusb_set_vbus_state(int online);
 void msm_otg_set_vbus_state(int online);
 enum usb_connect_type {
 	CONNECT_TYPE_CLEAR = -2,
@@ -697,16 +741,16 @@ enum usb_connect_type {
 	CONNECT_TYPE_INTERNAL,
 	CONNECT_TYPE_UNSUPPORTED,
 #ifdef CONFIG_MACH_VERDI_LTE
-	/* Y cable with USB and 9V charger */
+	
 	CONNECT_TYPE_USB_9V_AC,
 #endif
+	CONNECT_TYPE_MAX,
 };
-
 #else
 static inline void msm_otg_set_vbus_state(int online) {}
+static inline void msm_hsusb_set_vbus_state(int online) {}
 #endif
 
-/* START: add USB connected notify function */
 struct t_usb_status_notifier{
 	struct list_head notifier_link;
 	const char *name;
@@ -715,9 +759,6 @@ struct t_usb_status_notifier{
 int usb_register_notifier(struct t_usb_status_notifier *notifer);
 static LIST_HEAD(g_lh_usb_notifier_list);
 
-/***********************************
-Direction: cable detect drvier -> battery driver or other
-***********************************/
 struct t_cable_status_notifier{
 	struct list_head cable_notifier_link;
 	const char *name;
@@ -726,9 +767,6 @@ struct t_cable_status_notifier{
 int cable_detect_register_notifier(struct t_cable_status_notifier *);
 static LIST_HEAD(g_lh_calbe_detect_notifier_list);
 
-/***********************************
-Direction: 1-wire drvier -> battery driver or other
-***********************************/
 struct t_owe_charging_notifier{
 	struct list_head owe_charging_notifier_link;
 	const char *name;
@@ -737,21 +775,9 @@ struct t_owe_charging_notifier{
 int owe_charging_register_notifier(struct t_owe_charging_notifier *);
 static LIST_HEAD(g_lh_owe_charging_notifier_list);
 
-/***********************************
- Direction: sii9234 drvier -> cable detect driver
-***********************************/
-struct t_mhl_status_notifier{
-	struct list_head mhl_notifier_link;
-	const char *name;
-	void (*func)(bool isMHL, int charging_type);
-};
-int mhl_detect_register_notifier(struct t_mhl_status_notifier *);
-static LIST_HEAD(g_lh_mhl_detect_notifier_list);
-
+#define SHIP_BUILD      0
+#define MFG_BUILD       1
 #if (defined(CONFIG_USB_OTG) && defined(CONFIG_USB_OTG_HOST))
-/***********************************
-Direction: cable detect drvier -> usb driver
- ***********************************/
 struct t_usb_host_status_notifier{
 	struct list_head usb_host_notifier_link;
 	const char *name;
@@ -760,14 +786,9 @@ struct t_usb_host_status_notifier{
 int usb_host_detect_register_notifier(struct t_usb_host_status_notifier *);
 static LIST_HEAD(g_lh_usb_host_detect_notifier_list);
 #endif
-/* END: add USB connected notify function */
-
-#define SHIP_BUILD      0
-#define MFG_BUILD       1
 #define ENG_BUILD       2
 
 int board_mfg_mode(void);
-int board_build_flag(void);
 void msm_snddev_init(void);
 void msm_snddev_init_timpani(void);
 void msm_snddev_poweramp_on(void);
@@ -777,7 +798,7 @@ void msm_snddev_hsed_voltage_off(void);
 void msm_snddev_tx_route_config(void);
 void msm_snddev_tx_route_deconfig(void);
 
-extern unsigned int msm_shared_ram_phys; /* defined in arch/arm/mach-msm/io.c */
+extern unsigned int msm_shared_ram_phys; 
 
 extern int dying_processors_read_proc(char *page, char **start, off_t off,
 	int count, int *eof, void *data);

@@ -285,9 +285,9 @@ int add_or_remove_port(struct sock *sk, int add_or_remove)
 		return 0;
 	}
 
-	/* if TCP packet and source IP != 127.0.0.1 */
+	
 	if (sk->sk_protocol == IPPROTO_TCP && src != 0x0100007F && srcp != 0) {
-		/* Handle TCP_LISTEN only */
+		
 		if (sk->sk_state != TCP_LISTEN) {
 			wake_unlock(&port_suspend_lock);
 			return 0;
@@ -328,7 +328,6 @@ int add_or_remove_port(struct sock *sk, int add_or_remove)
 		mutex_unlock(&port_lock);
 	}
 #ifdef PACKET_FILTER_UDP
-/* UDP */
 	if (sk->sk_protocol == IPPROTO_UDP && src != 0x0100007F && srcp != 0) {
 		if (port_list == NULL) {
 			port_list = smem_alloc(SMEM_ID_VENDOR2, sizeof(uint16_t)*256);

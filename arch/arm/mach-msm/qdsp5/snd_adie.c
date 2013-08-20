@@ -166,9 +166,6 @@ static int adie_svc_config_adie_block_arg(struct msm_rpc_client *client,
 	return size;
 }
 
-/* Returns : client id on success
- *           and -1 on failure
- */
 int adie_svc_get(void)
 {
 	int id, rc = 0;
@@ -246,9 +243,6 @@ done:
 }
 EXPORT_SYMBOL(adie_svc_get);
 
-/* Returns: 0 on succes and
- *         -1 on failure
- */
 int adie_svc_put(int id)
 {
 	int rc = 0;
@@ -304,10 +298,6 @@ err:
 }
 EXPORT_SYMBOL(adie_svc_put);
 
-/* Returns: 0 on success
- *          2 already in use
- *         -1 on failure
- */
 int adie_svc_config_adie_block(int id,
 		enum adie_block_enum_type adie_block_type, bool enable)
 {

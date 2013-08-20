@@ -11,6 +11,8 @@
  *
  */
 
+#include <linux/module.h>
+#include <linux/wakelock.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -20,6 +22,7 @@
 #include <linux/videodev2.h>
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
+#include <mach/board.h>
 
 #include <media/v4l2-dev.h>
 #include <media/v4l2-ioctl.h>
@@ -33,12 +36,10 @@
 #include "msm_csiphy.h"
 #include "msm_ispif.h"
 #include "msm_sensor.h"
-#include "msm_actuator.h"
 #include "msm_vpe.h"
 #include "msm_vfe32.h"
-#include "msm_camera_eeprom.h"
 
-/* HTC_START */
+
 #ifdef CONFIG_RAWCHIP
 #include "rawchip/rawchip.h"
 #endif
@@ -46,7 +47,10 @@
 #ifdef CONFIG_SPI_CPLD
 #include <linux/spi/cpld.h>
 #endif
-/* HTC_END */
+
+#ifdef CONFIG_RAWCHIPII
+#include "yushanII/yushanII.h"
+#endif
 
 #ifdef CONFIG_MSM_CAMERA_DEBUG
 #define D(fmt, args...) pr_debug("msm_mctl: " fmt, ##args)
@@ -56,14 +60,13 @@
 
 #define MSM_V4L2_SWFI_LATENCY 3
 
-/* VFE required buffer number for streaming */
 static struct msm_isp_color_fmt msm_isp_formats[] = {
 	{
 	.name	   = "NV12YUV",
 	.depth	  = 12,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV12,
-	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, /* YUV sensor */
+	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -71,7 +74,15 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 12,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV21,
-	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, /* YUV sensor */
+	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, 
+	.colorspace = V4L2_COLORSPACE_JPEG,
+	},
+	{
+	.name	   = "YU12YUV",
+	.depth	  = 12,
+	.bitsperpxl = 8,
+	.fourcc	 = V4L2_PIX_FMT_YUV420M,
+	.pxlcode	= V4L2_MBUS_FMT_YUYV8_2X8, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -79,7 +90,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV12,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -87,7 +98,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV21,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -95,7 +106,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV16,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -103,7 +114,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV61,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -111,7 +122,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_NV21,
-	.pxlcode	= V4L2_MBUS_FMT_SGRBG10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SGRBG10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -119,7 +130,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 8,
 	.bitsperpxl = 8,
 	.fourcc	 = V4L2_PIX_FMT_YUV420M,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -127,7 +138,7 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 10,
 	.bitsperpxl = 10,
 	.fourcc	 = V4L2_PIX_FMT_SBGGR10,
-	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SBGGR10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 	{
@@ -135,13 +146,12 @@ static struct msm_isp_color_fmt msm_isp_formats[] = {
 	.depth	  = 10,
 	.bitsperpxl = 10,
 	.fourcc	 = V4L2_PIX_FMT_SBGGR10,
-	.pxlcode	= V4L2_MBUS_FMT_SGRBG10_1X10, /* Bayer sensor */
+	.pxlcode	= V4L2_MBUS_FMT_SGRBG10_1X10, 
 	.colorspace = V4L2_COLORSPACE_JPEG,
 	},
 
 };
 
-/* HTC_START chris 20120706 */
 static int msm_set_perf_lock(
 	struct msm_cam_media_controller *mctl,
 	int enable)
@@ -158,7 +168,6 @@ static int msm_set_perf_lock(
 #endif
 	return 0;
 }
-/* HTC_END */
 
 static int msm_get_sensor_info(
 	struct msm_cam_media_controller *mctl,
@@ -182,15 +191,25 @@ static int msm_get_sensor_info(
 	info.flash_enabled = sdata->flash_data->flash_type !=
 					MSM_CAMERA_FLASH_NONE;
 	info.pxlcode = pcam->usr_fmts[0].pxlcode;
-	info.flashtype = sdata->flash_type; /* two flash_types here? */
+	info.flashtype = sdata->flash_type; 
 	info.camera_type = sdata->camera_type;
-	/* sensor_type needed to add YUV/SOC in probing */
+	
 	info.sensor_type = sdata->sensor_type;
 	info.mount_angle = sdata->sensor_platform_info->mount_angle;
 	info.actuator_enabled = sdata->actuator_info ? 1 : 0;
 	info.strobe_flash_enabled = sdata->strobe_flash_data ? 1 : 0;
-	info.use_rawchip = sdata->use_rawchip; /* HTC Angie 20120523 - Rawchip */
-	/* copy back to user space */
+
+	pr_info("msm_get_sensor_info,sdata->htc_image=%d,sdata->use_rawchip=%d,sdata->hdr_mode=%d,sdata->video_hdr_capability=%d",sdata->htc_image,sdata->use_rawchip,sdata->hdr_mode,sdata->video_hdr_capability);
+	info.htc_image = sdata->htc_image;
+	info.hdr_mode = sdata->hdr_mode;
+	info.video_hdr_capability = sdata->video_hdr_capability;
+	
+	if (sdata->use_rawchip == RAWCHIP_ENABLE)
+		info.use_rawchip = RAWCHIP_ENABLE;
+	else
+		info.use_rawchip = RAWCHIP_DISABLE;
+	
+	
 	if (copy_to_user((void *)arg,
 				&info,
 				sizeof(struct msm_camsensor_info))) {
@@ -199,6 +218,7 @@ static int msm_get_sensor_info(
 	}
 	return rc;
 }
+
 
 static int msm_mctl_set_vfe_output_mode(struct msm_cam_media_controller
 					*p_mctl, void __user *arg)
@@ -215,8 +235,6 @@ static int msm_mctl_set_vfe_output_mode(struct msm_cam_media_controller
 	return rc;
 }
 
-/* called by the server or the config nodes to handle user space
-	commands*/
 static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 			unsigned int cmd, unsigned long arg)
 {
@@ -228,9 +246,9 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 	}
 	D("%s:%d: cmd %d\n", __func__, __LINE__, cmd);
 
-	/* ... call sensor, ISPIF or VEF subdev*/
+	
 	switch (cmd) {
-		/* sensor config*/
+		
 	case MSM_CAM_IOCTL_GET_SENSOR_INFO:
 			rc = msm_get_sensor_info(p_mctl, argp);
 			break;
@@ -281,6 +299,8 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 
 	case MSM_CAM_IOCTL_GET_ACTUATOR_INFO: {
 		struct msm_actuator_cfg_data cdata;
+		CDBG("%s: act_config: %p\n", __func__,
+			p_mctl->actctrl->a_config);
 		if (copy_from_user(&cdata,
 			(void *)argp,
 			sizeof(struct msm_actuator_cfg_data))) {
@@ -288,9 +308,10 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 			return -EFAULT;
 		}
 		cdata.is_af_supported = 0;
+		cdata.is_ois_supported = 0;
 		rc = 0;
 
-		if (p_mctl->act_sdev) {
+		if (p_mctl->actctrl->a_config) {
 			struct msm_camera_sensor_info *sdata;
 
 			sdata = p_mctl->sdata;
@@ -298,6 +319,7 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 				sdata->actuator_info->cam_name);
 
 			cdata.is_af_supported = 1;
+			cdata.is_ois_supported = p_mctl->actctrl->is_ois_supported;
 			cdata.cfg.cam_name =
 				(enum af_camera_name)sdata->
 				actuator_info->cam_name;
@@ -318,9 +340,8 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 
 	case MSM_CAM_IOCTL_ACTUATOR_IO_CFG: {
 		struct msm_actuator_cfg_data act_data;
-		if (p_mctl->act_sdev) {
-			rc = v4l2_subdev_call(p_mctl->act_sdev,
-				core, ioctl, VIDIOC_MSM_ACTUATOR_CFG, argp);
+		if (p_mctl->actctrl->a_config) {
+			rc = p_mctl->actctrl->a_config(argp);
 		} else {
 			rc = copy_from_user(
 				&act_data,
@@ -331,36 +352,10 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 				break;
 			}
 			act_data.is_af_supported = 0;
+			act_data.is_ois_supported = 0;
 			rc = copy_to_user((void *)argp,
 					 &act_data,
 					 sizeof(struct msm_actuator_cfg_data));
-			if (rc != 0) {
-				rc = -EFAULT;
-				break;
-			}
-		}
-		break;
-	}
-
-	case MSM_CAM_IOCTL_EEPROM_IO_CFG: {
-		struct msm_eeprom_cfg_data eeprom_data;
-		if (p_mctl->eeprom_sdev) {
-			eeprom_data.is_eeprom_supported = 1;
-			rc = v4l2_subdev_call(p_mctl->eeprom_sdev,
-				core, ioctl, VIDIOC_MSM_EEPROM_CFG, argp);
-		} else {
-			rc = copy_from_user(
-				&eeprom_data,
-				(void *)argp,
-				sizeof(struct msm_eeprom_cfg_data));
-			if (rc != 0) {
-				rc = -EFAULT;
-				break;
-			}
-			eeprom_data.is_eeprom_supported = 0;
-			rc = copy_to_user((void *)argp,
-					 &eeprom_data,
-					 sizeof(struct msm_eeprom_cfg_data));
 			if (rc != 0) {
 				rc = -EFAULT;
 				break;
@@ -420,7 +415,7 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 		rc = msm_mctl_pp_mctl_divert_done(p_mctl,
 			(void __user *)arg);
 		break;
-			/* ISFIF config*/
+			
 	case MSM_CAM_IOCTL_AXI_CONFIG:
 		if (p_mctl->axi_sdev)
 			rc = v4l2_subdev_call(p_mctl->axi_sdev, core, ioctl,
@@ -428,8 +423,7 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 		else
 			rc = p_mctl->isp_sdev->isp_config(p_mctl, cmd, arg);
 		break;
-
-/* HTC_START chris 20120706 */
+			
 	case MSM_CAM_IOCTL_SET_PERF_LOCK: {
 		int perf_lock_enable;
 		if (copy_from_user(&perf_lock_enable, argp, sizeof(perf_lock_enable))) {
@@ -440,10 +434,9 @@ static int msm_mctl_cmd(struct msm_cam_media_controller *p_mctl,
 		}
 		break;
 	}
-/* HTC_END */
 
 	default:
-		/* ISP config*/
+		
 		D("%s:%d: go to default. Calling msm_isp_config\n",
 			__func__, __LINE__);
 		rc = p_mctl->isp_sdev->isp_config(p_mctl, cmd, arg);
@@ -478,7 +471,7 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 	struct msm_camera_device_platform_data *pdata = sinfo->pdata;
 
 	if (pdata->is_csiphy) {
-		/* register csiphy subdev */
+		
 		driver = driver_find(MSM_CSIPHY_DRV_NAME, &platform_bus_type);
 		if (!driver)
 			goto out;
@@ -486,14 +479,13 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 		dev = driver_find_device(driver, NULL, (void *)core_index,
 				msm_mctl_subdev_match_core);
 		if (!dev)
-			goto out_put_driver;
+			goto out;
 
 		p_mctl->csiphy_sdev = dev_get_drvdata(dev);
-		put_driver(driver);
 	}
 
 	if (pdata->is_csic) {
-		/* register csic subdev */
+		
 		driver = driver_find(MSM_CSIC_DRV_NAME, &platform_bus_type);
 		if (!driver)
 			goto out;
@@ -501,14 +493,13 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 		dev = driver_find_device(driver, NULL, (void *)core_index,
 				msm_mctl_subdev_match_core);
 		if (!dev)
-			goto out_put_driver;
+			goto out;
 
 		p_mctl->csic_sdev = dev_get_drvdata(dev);
-		put_driver(driver);
 	}
 
 	if (pdata->is_csid) {
-		/* register csid subdev */
+		
 		driver = driver_find(MSM_CSID_DRV_NAME, &platform_bus_type);
 		if (!driver)
 			goto out;
@@ -516,14 +507,13 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 		dev = driver_find_device(driver, NULL, (void *)core_index,
 				msm_mctl_subdev_match_core);
 		if (!dev)
-			goto out_put_driver;
+			goto out;
 
 		p_mctl->csid_sdev = dev_get_drvdata(dev);
-		put_driver(driver);
 	}
 
 	if (pdata->is_ispif) {
-		/* register ispif subdev */
+		
 		driver = driver_find(MSM_ISPIF_DRV_NAME, &platform_bus_type);
 		if (!driver)
 			goto out;
@@ -531,13 +521,12 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 		dev = driver_find_device(driver, NULL, 0,
 				msm_mctl_subdev_match_core);
 		if (!dev)
-			goto out_put_driver;
+			goto out;
 
 		p_mctl->ispif_sdev = dev_get_drvdata(dev);
-		put_driver(driver);
 	}
 
-	/* register vfe subdev */
+	
 	driver = driver_find(MSM_VFE_DRV_NAME, &platform_bus_type);
 	if (!driver)
 		goto out;
@@ -545,31 +534,28 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 	dev = driver_find_device(driver, NULL, 0,
 				msm_mctl_subdev_match_core);
 	if (!dev)
-		goto out_put_driver;
+		goto out;
 
 	p_mctl->isp_sdev->sd = dev_get_drvdata(dev);
-	put_driver(driver);
 
 	if (pdata->is_vpe) {
-		/* register vfe subdev */
+		
 		driver = driver_find(MSM_VPE_DRV_NAME, &platform_bus_type);
 		if (!driver)
 			goto out;
 
 		dev = driver_find_device(driver, NULL, 0,
 				msm_mctl_subdev_match_core);
-		if (!dev)
-			goto out_put_driver;
+		if (!dev){pr_info("%s: driver_find_device \n", __func__);
+			goto out;}
 
 		p_mctl->vpe_sdev = dev_get_drvdata(dev);
-		put_driver(driver);
 	}
 
 	rc = 0;
 
-
-#ifdef CONFIG_MSM_GEMINI /* HTC Angie 20120724 */
-	/* register gemini subdev */
+#if 0		
+	
 	driver = driver_find(MSM_GEMINI_DRV_NAME, &platform_bus_type);
 	if (!driver) {
 		pr_err("%s:%d:Gemini: Failure: goto out\n",
@@ -595,10 +581,8 @@ static int msm_mctl_register_subdevs(struct msm_cam_media_controller *p_mctl,
 		goto out_put_driver;
 	}
 	rc = 0;
-#endif /* HTC Angie 20120724 */
-	return rc;
-out_put_driver:
-	put_driver(driver);
+#endif 
+
 out:
 	return rc;
 }
@@ -614,17 +598,19 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 	uint8_t csid_core;
 	int hardware_retry;
 
-	pr_info("%s\n", __func__);
+	D("%s\n", __func__);
 	if (!p_mctl) {
 		pr_err("%s: param is NULL", __func__);
 		return -EINVAL;
 	}
 
 	mutex_lock(&p_mctl->lock);
-	/* open sub devices - once only*/
+	
 	if (!p_mctl->opencnt) {
 		uint32_t csid_version;
-		wake_lock(&p_mctl->wake_lock);
+		wake_lock(&p_mctl->wake_lock_suspend);
+		
+		
 
 		csid_core = camdev->csid_core;
 		rc = msm_mctl_register_subdevs(p_mctl, csid_core);
@@ -632,61 +618,6 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 			pr_err("%s: msm_mctl_register_subdevs failed:%d\n",
 				__func__, rc);
 			goto register_sdev_failed;
-		}
-
-/* HTC_START */
-		for (hardware_retry = 0; hardware_retry < 3; hardware_retry++) {
-			pr_info("hardware_retry=%d\n", hardware_retry);
-#ifdef CONFIG_RAWCHIP
-			if (s_ctrl->sensordata->use_rawchip) {
-#ifdef CONFIG_SPI_CPLD
-				/* cpld driver power on */
-				pr_info("%s, call cpld_open_init\n", __func__);
-				cpld_open_init();
-#endif
-				rc = rawchip_open_init();
-				if (rc < 0) {
-					pr_err("%s: rawchip_open_init failed:%d\n", __func__, rc);
-#ifdef CONFIG_SPI_CPLD
-					/* cpld driver power off */
-					pr_info("%s, call cpld_release\n", __func__);
-					cpld_release();
-#endif
-					continue;
-				}
-			}
-#endif
-/* HTC_END */
-
-			/* then sensor - move sub dev later */
-			rc = v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 1);
-			if (rc < 0) {
-				pr_err("%s: sensor powerup failed: %d\n", __func__, rc);
-/* HTC_START */
-#ifdef CONFIG_RAWCHIP
-				if (s_ctrl->sensordata->use_rawchip) {
-					rawchip_release();
-#ifdef CONFIG_SPI_CPLD
-					/* cpld driver power off */
-					pr_info("%s, call cpld_release\n", __func__);
-					cpld_release();
-#endif
-				}
-#endif
-/* HTC_END */
-				continue;
-			} else
-				break;
-		}
-		if (rc < 0)
-			goto sensor_sdev_failed;
-
-		if (p_mctl->act_sdev)
-			rc = v4l2_subdev_call(p_mctl->act_sdev,
-				core, s_power, 1);
-		if (rc < 0) {
-			pr_err("%s: act power failed:%d\n", __func__, rc);
-			goto act_power_up_failed;
 		}
 
 		if (camdev->is_csiphy) {
@@ -708,7 +639,6 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 				goto csid_init_failed;
 			}
 		}
-
 		if (camdev->is_csic) {
 			rc = v4l2_subdev_call(p_mctl->csic_sdev, core, ioctl,
 				VIDIOC_MSM_CSIC_INIT, &csid_version);
@@ -719,10 +649,11 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 			}
 		}
 
-		/* ISP first*/
+		
 		if (p_mctl->isp_sdev && p_mctl->isp_sdev->isp_open) {
 			rc = p_mctl->isp_sdev->isp_open(
 				p_mctl->isp_sdev->sd, p_mctl);
+	
 			if (rc < 0) {
 				pr_err("%s: isp init failed: %d\n",
 					__func__, rc);
@@ -739,7 +670,6 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 				goto axi_init_failed;
 			}
 		}
-
 		if (camdev->is_vpe) {
 			rc = v4l2_subdev_call(p_mctl->vpe_sdev, core, ioctl,
 				VIDIOC_MSM_VPE_INIT, p_mctl);
@@ -749,6 +679,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 				goto vpe_init_failed;
 			}
 		}
+
 
 		if (camdev->is_ispif) {
 			rc = v4l2_subdev_call(p_mctl->ispif_sdev, core, ioctl,
@@ -760,6 +691,87 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 			}
 		}
 
+#ifndef CONFIG_ARCH_MSM7X27A
+		rc = msm_camio_probe_on(s_ctrl);
+		if (rc)
+			pr_info("%s msm_camio_probe_on rc(%d)\n", __func__, rc);
+#endif
+
+		for (hardware_retry = 0; hardware_retry < 3; hardware_retry++) {
+			pr_info("hardware_retry=%d\n", hardware_retry);
+			if (p_mctl->sdata->use_rawchip) {
+#ifdef CONFIG_SPI_CPLD
+				
+				pr_info("%s, call cpld_open_init\n", __func__);
+				cpld_open_init();
+#endif
+
+#ifdef CONFIG_RAWCHIP
+				rc = rawchip_open_init();
+				if (rc < 0) {
+					pr_err("%s: rawchip_open_init failed:%d\n", __func__, rc);
+#ifdef CONFIG_SPI_CPLD
+					
+					pr_info("%s, call cpld_release\n", __func__);
+					cpld_release();
+#endif
+					continue;
+				}
+#endif
+			}
+
+			if (p_mctl->sdata->htc_image == HTC_CAMERA_IMAGE_YUSHANII_BOARD) {
+#ifdef CONFIG_RAWCHIPII
+				rc = YushanII_open_init();
+				if (rc < 0) {
+					goto sensor_sdev_failed;
+				}
+#endif
+			}
+
+			
+			rc = v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 1);
+
+			if (rc < 0) {
+				pr_err("%s: sensor powerup failed: %d\n", __func__, rc);
+
+				if (s_ctrl->sensordata->use_rawchip) {
+#ifdef CONFIG_RAWCHIP
+					rawchip_release();
+#endif
+#ifdef CONFIG_SPI_CPLD
+					
+					pr_info("%s, call cpld_release\n", __func__);
+					cpld_release();
+#endif
+
+				}
+				continue;
+			} else
+				break;
+		}
+		if (rc < 0)
+			goto sensor_sdev_failed;
+
+		
+		if (p_mctl->actctrl->a_init_table)
+			rc = p_mctl->actctrl->a_init_table();
+
+		if (rc < 0) {
+			pr_err("%s: act init failed: %d\n", __func__, rc);
+			goto act_power_up_failed;
+		}
+		
+
+		if (p_mctl->actctrl->a_power_up)
+			rc = p_mctl->actctrl->a_power_up(
+				p_mctl->sdata->actuator_info);
+
+		if (rc < 0) {
+			pr_err("%s: act power failed:%d\n", __func__, rc);
+			goto act_power_up_failed;
+		}
+
 		if (camdev->is_ispif) {
 			pm_qos_add_request(&p_mctl->pm_qos_req_list,
 				PM_QOS_CPU_DMA_LATENCY, PM_QOS_DEFAULT_VALUE);
@@ -768,6 +780,7 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 		}
 		p_mctl->apps_id = apps_id;
 		p_mctl->opencnt++;
+		
 	} else {
 		D("%s: camera is already open", __func__);
 	}
@@ -775,6 +788,14 @@ static int msm_mctl_open(struct msm_cam_media_controller *p_mctl,
 
 	return rc;
 
+act_power_up_failed:
+	if (v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 0) < 0)
+		pr_err("%s: sensor powerdown failed: %d\n", __func__, rc);
+sensor_sdev_failed:
+	if (camdev->is_ispif)
+		if (v4l2_subdev_call(p_mctl->ispif_sdev, core, ioctl,
+			VIDIOC_MSM_ISPIF_RELEASE, NULL) < 0)
+			pr_err("%s: ispif release failed %d\n", __func__, rc);
 ispif_init_failed:
 	if (camdev->is_vpe)
 		if (v4l2_subdev_call(p_mctl->vpe_sdev, core, ioctl,
@@ -804,16 +825,9 @@ csid_init_failed:
 			VIDIOC_MSM_CSIPHY_RELEASE, NULL) < 0)
 			pr_err("%s: csiphy release failed %d\n", __func__, rc);
 csiphy_init_failed:
-	if (p_mctl->act_sdev)
-		if (v4l2_subdev_call(p_mctl->act_sdev, core,
-			s_power, 0) < 0)
-			pr_err("%s: act power down failed:%d\n", __func__, rc);
-act_power_up_failed:
-	if (v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 0) < 0)
-		pr_err("%s: sensor powerdown failed: %d\n", __func__, rc);
-sensor_sdev_failed:
 register_sdev_failed:
-	wake_unlock(&p_mctl->wake_lock);
+	wake_unlock(&p_mctl->wake_lock_suspend);
+
 	mutex_unlock(&p_mctl->lock);
 	return rc;
 }
@@ -826,30 +840,23 @@ static int msm_mctl_release(struct msm_cam_media_controller *p_mctl)
 		(struct msm_camera_sensor_info *) s_ctrl->sensordata;
 	struct msm_camera_device_platform_data *camdev = sinfo->pdata;
 
-	pr_info("%s\n", __func__);
-
+#if 0 
 	v4l2_subdev_call(p_mctl->sensor_sdev, core, ioctl,
 		VIDIOC_MSM_SENSOR_RELEASE, NULL);
-
+#endif
 	if (camdev->is_ispif) {
 		v4l2_subdev_call(p_mctl->ispif_sdev, core, ioctl,
 			VIDIOC_MSM_ISPIF_RELEASE, NULL);
 	}
-
-	if (camdev->is_csic) {
-		v4l2_subdev_call(p_mctl->csic_sdev, core, ioctl,
-			VIDIOC_MSM_CSIC_RELEASE, NULL);
-	}
-
 	if (camdev->is_vpe) {
 		v4l2_subdev_call(p_mctl->vpe_sdev, core, ioctl,
 			VIDIOC_MSM_VPE_RELEASE, NULL);
 	}
-
 	if (p_mctl->axi_sdev) {
 		v4l2_subdev_call(p_mctl->axi_sdev, core, ioctl,
 			VIDIOC_MSM_AXI_RELEASE, NULL);
 	}
+
 
 	if (p_mctl->isp_sdev && p_mctl->isp_sdev->isp_release)
 		p_mctl->isp_sdev->isp_release(p_mctl,
@@ -860,42 +867,57 @@ static int msm_mctl_release(struct msm_cam_media_controller *p_mctl)
 			VIDIOC_MSM_CSID_RELEASE, NULL);
 	}
 
+	if (camdev->is_csic) {
+		v4l2_subdev_call(p_mctl->csic_sdev, core, ioctl,
+			VIDIOC_MSM_CSIC_RELEASE, NULL);
+	}
+
 	if (camdev->is_csiphy) {
 		v4l2_subdev_call(p_mctl->csiphy_sdev, core, ioctl,
 			VIDIOC_MSM_CSIPHY_RELEASE, NULL);
 	}
 
+	if (p_mctl->actctrl->a_power_down)
+		p_mctl->actctrl->a_power_down(
+			p_mctl->sdata->actuator_info);
+	
+#ifndef CONFIG_ARCH_MSM7X27A
+	
+	rc = msm_camio_probe_off(s_ctrl);
+	if (rc)
+		pr_info("%s msm_camio_probe_off rc(%d)\n", __func__, rc);
+	
+#endif
+	v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 0);
 	if (camdev->is_ispif) {
 		pm_qos_update_request(&p_mctl->pm_qos_req_list,
 				PM_QOS_DEFAULT_VALUE);
 		pm_qos_remove_request(&p_mctl->pm_qos_req_list);
 	}
 
-	if (p_mctl->act_sdev) {
-		v4l2_subdev_call(p_mctl->act_sdev, core, s_power, 0);
-		p_mctl->act_sdev = NULL;
-	}
-
-	v4l2_subdev_call(p_mctl->sensor_sdev, core, s_power, 0);
-
-/* HTC_START */
-#ifdef CONFIG_RAWCHIP
 	if (p_mctl->sdata->use_rawchip) {
-		rawchip_release();
+#ifdef CONFIG_RAWCHIP
+			rawchip_release();
+#endif
+
 #ifdef CONFIG_SPI_CPLD
-		/* cpld driver power off */
-		pr_info("%s, call cpld_release\n", __func__);
-		cpld_release();
+			
+			pr_info("%s, call cpld_release\n", __func__);
+			cpld_release();
+#endif
+		}
+
+		if (p_mctl->sdata->htc_image == HTC_CAMERA_IMAGE_YUSHANII_BOARD) {
+#ifdef CONFIG_RAWCHIPII
+			YushanII_release();
 #endif
 	}
-#endif
-/* HTC_END */
 
-/* HTC_START chris 20120706 */
 	(void)msm_set_perf_lock(p_mctl, 0);
-//HTC_END
 
-	wake_unlock(&p_mctl->wake_lock);
+	
+	
+	wake_unlock(&p_mctl->wake_lock_suspend);
 	return rc;
 }
 
@@ -922,7 +944,7 @@ int msm_mctl_init_user_formats(struct msm_cam_v4l2_device *pcam)
 	if (!pcam->usr_fmts)
 		return -ENOMEM;
 
-	/* from sensor to ISP.. fill the data structure */
+	
 	for (i = 0; i < numfmt_sensor; i++) {
 		rc = v4l2_subdev_call(sd, video, enum_mbus_fmt, i, &pxlcode);
 		D("rc is  %d\n", rc);
@@ -932,7 +954,7 @@ int msm_mctl_init_user_formats(struct msm_cam_v4l2_device *pcam)
 		}
 
 		for (j = 0; j < ARRAY_SIZE(msm_isp_formats); j++) {
-			/* find the corresponding format */
+			
 			if (pxlcode == msm_isp_formats[j].pxlcode) {
 				pcam->usr_fmts[numfmt] = msm_isp_formats[j];
 				D("pcam->usr_fmts=0x%x\n", (u32)pcam->usr_fmts);
@@ -953,12 +975,9 @@ int msm_mctl_init_user_formats(struct msm_cam_v4l2_device *pcam)
 	}
 
 	D("Found %d supported formats.\n", pcam->num_fmts);
-	/* set the default pxlcode, in any case, it will be set through
-	 * setfmt */
 	return 0;
 }
 
-/* this function plug in the implementation of a v4l2_subdev */
 int msm_mctl_init(struct msm_cam_v4l2_device *pcam)
 {
 	struct msm_cam_media_controller *pmctl = NULL;
@@ -978,23 +997,23 @@ int msm_mctl_init(struct msm_cam_v4l2_device *pcam)
 		pr_err("%s: invalid mctl controller", __func__);
 		return -EINVAL;
 	}
-
-	wake_lock_init(&pmctl->wake_lock, WAKE_LOCK_IDLE, "msm_camera");
+	wake_lock_init(&pmctl->wake_lock_suspend, WAKE_LOCK_SUSPEND, "msm_camera_suspend");
+	
+	
 	mutex_init(&pmctl->lock);
 	pmctl->opencnt = 0;
 
-	/* init module operations*/
+	
 	pmctl->mctl_open = msm_mctl_open;
 	pmctl->mctl_cmd = msm_mctl_cmd;
 	pmctl->mctl_release = msm_mctl_release;
-	/* init mctl buf */
+	
 	msm_mctl_buf_init(pcam);
 	memset(&pmctl->pp_info, 0, sizeof(pmctl->pp_info));
 	pmctl->vfe_output_mode = 0;
 	spin_lock_init(&pmctl->pp_info.lock);
-
 	pmctl->act_sdev = pcam->act_sdev;
-	pmctl->eeprom_sdev = pcam->eeprom_sdev;
+	pmctl->actctrl = &pcam->actctrl;
 	pmctl->sensor_sdev = pcam->sensor_sdev;
 	pmctl->sdata = pcam->sdata;
 
@@ -1019,19 +1038,20 @@ int msm_mctl_free(struct msm_cam_v4l2_device *pcam)
 	}
 
 	mutex_destroy(&pmctl->lock);
-	wake_lock_destroy(&pmctl->wake_lock);
+	
+	
+	wake_lock_destroy(&pmctl->wake_lock_suspend);
 	msm_camera_free_mctl(pcam->mctl_handle);
 	return rc;
 }
-
-/* mctl node v4l2_file_operations */
 static int msm_mctl_dev_open(struct file *f)
 {
 	int rc = -EINVAL, i;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = NULL;
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	struct msm_cam_media_controller *pmctl;
+	D("%s : E ", __func__);
 
 	if (f == NULL) {
 		pr_err("%s :: cannot open video driver data", __func__);
@@ -1043,14 +1063,13 @@ static int msm_mctl_dev_open(struct file *f)
 		pr_err("%s NULL pointer passed in!\n", __func__);
 		return rc;
 	}
-
 	D("%s : E use_count %d", __func__, pcam->mctl_node.use_count);
 	mutex_lock(&pcam->mctl_node.dev_lock);
 	for (i = 0; i < MSM_DEV_INST_MAX; i++) {
 		if (pcam->mctl_node.dev_inst[i] == NULL)
 			break;
 	}
-	/* if no instance is available, return error */
+	
 	if (i == MSM_DEV_INST_MAX) {
 		mutex_unlock(&pcam->mctl_node.dev_lock);
 		return rc;
@@ -1064,10 +1083,12 @@ static int msm_mctl_dev_open(struct file *f)
 	pcam_inst->sensor_pxlcode = pcam->usr_fmts[0].pxlcode;
 	pcam_inst->my_index = i;
 	pcam_inst->pcam = pcam;
+	mutex_init(&pcam_inst->inst_lock);
 	pcam->mctl_node.dev_inst[i] = pcam_inst;
 
 	D("%s pcam_inst %p my_index = %d\n", __func__,
 		pcam_inst, pcam_inst->my_index);
+
 	rc = msm_cam_server_open_mctl_session(pcam,
 		&pcam->mctl_node.active);
 	if (rc < 0) {
@@ -1082,7 +1103,7 @@ static int msm_mctl_dev_open(struct file *f)
 		return rc;
 	}
 
-	D("%s active %d\n", __func__, pcam->mctl_node.active);
+	D("%s active %d\n", __func__, pcam->mctl_node.active);		
 	rc = msm_setup_v4l2_event_queue(&pcam_inst->eventHandle,
 					pcam->mctl_node.pvdev);
 	if (rc < 0) {
@@ -1095,8 +1116,8 @@ static int msm_mctl_dev_open(struct file *f)
 
 	D("f->private_data = 0x%x, pcam = 0x%x\n",
 		(u32)f->private_data, (u32)pcam_inst);
-
 	pcam->mctl_node.use_count++;
+
 	mutex_unlock(&pcam->mctl_node.dev_lock);
 	D("%s : X ", __func__);
 	return rc;
@@ -1151,9 +1172,9 @@ static int msm_mctl_dev_close(struct file *f)
 		pr_err("%s NULL pointer of camera device!\n", __func__);
 		return -EINVAL;
 	}
-
 	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
 	mutex_lock(&pcam->mctl_node.dev_lock);
+
 	D("%s : active %d ", __func__, pcam->mctl_node.active);
 	if (pcam->mctl_node.active == 1) {
 		rc = msm_cam_server_close_mctl_session(pcam);
@@ -1164,7 +1185,7 @@ static int msm_mctl_dev_close(struct file *f)
 			return rc;
 		}
 		pmctl = NULL;
-	}
+	}	
 	pcam_inst->streamon = 0;
 	pcam->mctl_node.dev_inst_map[pcam_inst->image_mode] = NULL;
 	if (pcam_inst->vbqueue_initialized)
@@ -1173,6 +1194,7 @@ static int msm_mctl_dev_close(struct file *f)
 	pcam->mctl_node.dev_inst[pcam_inst->my_index] = NULL;
 	v4l2_fh_del(&pcam_inst->eventHandle);
 	v4l2_fh_exit(&pcam_inst->eventHandle);
+	mutex_destroy(&pcam_inst->inst_lock);
 
 	kfree(pcam_inst);
 	if (NULL != pmctl) {
@@ -1194,11 +1216,6 @@ static struct v4l2_file_operations g_msm_mctl_fops = {
 	.unlocked_ioctl = video_ioctl2,
 };
 
-/*
- *
- * implementation of mctl node v4l2_ioctl_ops
- *
- */
 static int msm_mctl_v4l2_querycap(struct file *f, void *pctx,
 				struct v4l2_capability *pcaps)
 {
@@ -1290,21 +1307,22 @@ static int msm_mctl_v4l2_reqbufs(struct file *f, void *pctx,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
+
+	mutex_lock(&pcam_inst->inst_lock);
 	rc = vb2_reqbufs(&pcam_inst->vid_bufq, pb);
 	if (rc < 0) {
 		pr_err("%s reqbufs failed %d ", __func__, rc);
+		mutex_unlock(&pcam_inst->inst_lock);
 		return rc;
 	}
 	if (!pb->count) {
-		/* Deallocation. free buf_offset array */
+		
 		D("%s Inst %p freeing buffer offsets array",
 			__func__, pcam_inst);
 		for (j = 0 ; j < pcam_inst->buf_count ; j++)
 			kfree(pcam_inst->buf_offset[j]);
 		kfree(pcam_inst->buf_offset);
 		pcam_inst->buf_offset = NULL;
-		/* If the userspace has deallocated all the
-		 * buffers, then release the vb2 queue */
 		if (pcam_inst->vbqueue_initialized) {
 			vb2_queue_release(&pcam_inst->vid_bufq);
 			pcam_inst->vbqueue_initialized = 0;
@@ -1312,12 +1330,13 @@ static int msm_mctl_v4l2_reqbufs(struct file *f, void *pctx,
 	} else {
 		D("%s Inst %p Allocating buf_offset array",
 			__func__, pcam_inst);
-		/* Allocation. allocate buf_offset array */
+		
 		pcam_inst->buf_offset = (struct msm_cam_buf_offset **)
 			kzalloc(pb->count * sizeof(struct msm_cam_buf_offset *),
 							GFP_KERNEL);
 		if (!pcam_inst->buf_offset) {
 			pr_err("%s out of memory ", __func__);
+			mutex_unlock(&pcam_inst->inst_lock);
 			return -ENOMEM;
 		}
 		for (i = 0; i < pb->count; i++) {
@@ -1330,6 +1349,7 @@ static int msm_mctl_v4l2_reqbufs(struct file *f, void *pctx,
 					kfree(pcam_inst->buf_offset[j]);
 				kfree(pcam_inst->buf_offset);
 				pcam_inst->buf_offset = NULL;
+				mutex_unlock(&pcam_inst->inst_lock);
 				return -ENOMEM;
 			}
 		}
@@ -1337,27 +1357,32 @@ static int msm_mctl_v4l2_reqbufs(struct file *f, void *pctx,
 	pcam_inst->buf_count = pb->count;
 	D("%s inst %p, buf count %d ", __func__,
 		pcam_inst, pcam_inst->buf_count);
+	mutex_unlock(&pcam_inst->inst_lock);
 	return rc;
 }
 
 static int msm_mctl_v4l2_querybuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
-	/* get the video device */
+	
+	int rc = 0;
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
-	return vb2_querybuf(&pcam_inst->vid_bufq, pb);
+	mutex_lock(&pcam_inst->inst_lock);
+	rc = vb2_querybuf(&pcam_inst->vid_bufq, pb);
+	mutex_unlock(&pcam_inst->inst_lock);
+	return rc;
 }
 
 static int msm_mctl_v4l2_qbuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
 	int rc = 0, i = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
@@ -1365,15 +1390,18 @@ static int msm_mctl_v4l2_qbuf(struct file *f, void *pctx,
 	D("%s Inst = %p\n", __func__, pcam_inst);
 	WARN_ON(pctx != f->private_data);
 
+	mutex_lock(&pcam_inst->inst_lock);
 	if (!pcam_inst->buf_offset) {
 		pr_err("%s Buffer is already released. Returning. ", __func__);
+		mutex_unlock(&pcam_inst->inst_lock);
 		return -EINVAL;
 	}
 
 	if (pb->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		/* Reject the buffer if planes array was not allocated */
+		
 		if (pb->m.planes == NULL) {
 			pr_err("%s Planes array is null ", __func__);
+			mutex_unlock(&pcam_inst->inst_lock);
 			return -EINVAL;
 		}
 		for (i = 0; i < pcam_inst->plane_info.num_planes; i++) {
@@ -1399,6 +1427,7 @@ static int msm_mctl_v4l2_qbuf(struct file *f, void *pctx,
 	rc = vb2_qbuf(&pcam_inst->vid_bufq, pb);
 	D("%s, videobuf_qbuf returns %d\n", __func__, rc);
 
+	mutex_unlock(&pcam_inst->inst_lock);
 	return rc;
 }
 
@@ -1406,17 +1435,23 @@ static int msm_mctl_v4l2_dqbuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
+	mutex_lock(&pcam_inst->inst_lock);
+	if (0 == pcam_inst->streamon) {
+		mutex_unlock(&pcam_inst->inst_lock);
+		return -EACCES;
+	}
 
 	rc = vb2_dqbuf(&pcam_inst->vid_bufq, pb,  f->f_flags & O_NONBLOCK);
 	D("%s, videobuf_dqbuf returns %d\n", __func__, rc);
 
+	mutex_unlock(&pcam_inst->inst_lock);
 	return rc;
 }
 
@@ -1424,7 +1459,7 @@ static int msm_mctl_v4l2_streamon(struct file *f, void *pctx,
 					enum v4l2_buf_type buf_type)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1433,20 +1468,24 @@ static int msm_mctl_v4l2_streamon(struct file *f, void *pctx,
 	D("%s Inst %p\n", __func__, pcam_inst);
 	WARN_ON(pctx != f->private_data);
 
+	mutex_lock(&pcam->mctl_node.dev_lock);
+	mutex_lock(&pcam_inst->inst_lock);
 	if ((buf_type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) &&
 		(buf_type != V4L2_BUF_TYPE_VIDEO_CAPTURE)) {
 		pr_err("%s Invalid buffer type ", __func__);
+		mutex_unlock(&pcam_inst->inst_lock);
+		mutex_unlock(&pcam->mctl_node.dev_lock);
 		return -EINVAL;
 	}
 
 	D("%s Calling videobuf_streamon", __func__);
-	/* if HW streaming on is successful, start buffer streaming */
+	
 	rc = vb2_streamon(&pcam_inst->vid_bufq, buf_type);
 	D("%s, videobuf_streamon returns %d\n", __func__, rc);
 
-	mutex_lock(&pcam->mctl_node.dev_lock);
-	/* turn HW (VFE/sensor) streaming */
+	
 	pcam_inst->streamon = 1;
+	mutex_unlock(&pcam_inst->inst_lock);
 	mutex_unlock(&pcam->mctl_node.dev_lock);
 	D("%s rc = %d\n", __func__, rc);
 	return rc;
@@ -1456,7 +1495,7 @@ static int msm_mctl_v4l2_streamoff(struct file *f, void *pctx,
 					enum v4l2_buf_type buf_type)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1471,24 +1510,24 @@ static int msm_mctl_v4l2_streamoff(struct file *f, void *pctx,
 		return -EINVAL;
 	}
 
-	/* first turn of HW (VFE/sensor) streaming so that buffers are
-		not in use when we free the buffers */
 	mutex_lock(&pcam->mctl_node.dev_lock);
+	mutex_lock(&pcam_inst->inst_lock);
 	pcam_inst->streamon = 0;
-	mutex_unlock(&pcam->mctl_node.dev_lock);
 	if (rc < 0)
 		pr_err("%s: hw failed to stop streaming\n", __func__);
 
-	/* stop buffer streaming */
+	
 	rc = vb2_streamoff(&pcam_inst->vid_bufq, buf_type);
 	D("%s, videobuf_streamoff returns %d\n", __func__, rc);
+	mutex_unlock(&pcam_inst->inst_lock);
+	mutex_unlock(&pcam->mctl_node.dev_lock);
 	return rc;
 }
 
 static int msm_mctl_v4l2_enum_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_fmtdesc *pfmtdesc)
 {
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	const struct msm_isp_color_fmt *isp_fmt;
 
@@ -1542,9 +1581,6 @@ static int msm_mctl_v4l2_g_fmt_cap_mplane(struct file *f,
 	return rc;
 }
 
-/* This function will readjust the format parameters based in HW
-  capabilities. Called by s_fmt_cap
-*/
 static int msm_mctl_v4l2_try_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_format *pfmt)
 {
@@ -1567,14 +1603,11 @@ static int msm_mctl_v4l2_try_fmt_cap_mplane(struct file *f, void *pctx,
 	return rc;
 }
 
-/* This function will reconfig the v4l2 driver and HW device, it should be
-   called after the streaming is stopped.
-*/
 static int msm_mctl_v4l2_s_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_format *pfmt)
 {
 	int rc = 0;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_media_controller *pmctl;
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
@@ -1586,7 +1619,6 @@ static int msm_mctl_v4l2_s_fmt_cap(struct file *f, void *pctx,
 		__func__, (u32)pcam_inst, pcam_inst->my_index,
 		(void *)pfmt->fmt.pix.priv);
 	WARN_ON(pctx != f->private_data);
-
 	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
 	if (!pcam_inst->vbqueue_initialized) {
 		pmctl->mctl_vbqueue_init(pcam_inst, &pcam_inst->vid_bufq,
@@ -1679,7 +1711,6 @@ static int msm_mctl_v4l2_s_crop(struct file *f, void *pctx,
 	return rc;
 }
 
-/* Stream type-dependent parameter ioctls */
 static int msm_mctl_v4l2_g_parm(struct file *f, void *pctx,
 				struct v4l2_streamparm *a)
 {
@@ -1755,7 +1786,6 @@ static int msm_mctl_v4l2_unsubscribe_event(struct v4l2_fh *fh,
 	return rc;
 }
 
-/* mctl node v4l2_ioctl_ops */
 static const struct v4l2_ioctl_ops g_msm_mctl_ioctl_ops = {
 	.vidioc_querycap = msm_mctl_v4l2_querycap,
 
@@ -1774,7 +1804,7 @@ static const struct v4l2_ioctl_ops g_msm_mctl_ioctl_ops = {
 	.vidioc_streamon = msm_mctl_v4l2_streamon,
 	.vidioc_streamoff = msm_mctl_v4l2_streamoff,
 
-	/* format ioctls */
+	
 	.vidioc_enum_fmt_vid_cap = msm_mctl_v4l2_enum_fmt_cap,
 	.vidioc_enum_fmt_vid_cap_mplane = msm_mctl_v4l2_enum_fmt_cap,
 	.vidioc_try_fmt_vid_cap = msm_mctl_v4l2_try_fmt_cap,
@@ -1787,11 +1817,11 @@ static const struct v4l2_ioctl_ops g_msm_mctl_ioctl_ops = {
 	.vidioc_g_jpegcomp = msm_mctl_v4l2_g_jpegcomp,
 	.vidioc_s_jpegcomp = msm_mctl_v4l2_s_jpegcomp,
 
-	/* Stream type-dependent parameter ioctls */
+	
 	.vidioc_g_parm =  msm_mctl_v4l2_g_parm,
 	.vidioc_s_parm =  msm_mctl_v4l2_s_parm,
 
-	/* event subscribe/unsubscribe */
+	
 	.vidioc_subscribe_event = msm_mctl_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event = msm_mctl_v4l2_unsubscribe_event,
 };
@@ -1804,28 +1834,24 @@ int msm_setup_mctl_node(struct msm_cam_v4l2_device *pcam)
 
 	D("%s\n", __func__);
 
-	/* first register the v4l2 device */
+	
 	pcam->mctl_node.v4l2_dev.dev = &client->dev;
 	rc = v4l2_device_register(pcam->mctl_node.v4l2_dev.dev,
 				&pcam->mctl_node.v4l2_dev);
 	if (rc < 0)
 		return -EINVAL;
-	/*	else
-			pcam->v4l2_dev.notify = msm_cam_v4l2_subdev_notify; */
 
-	/* now setup video device */
+	
 	pvdev = video_device_alloc();
 	if (pvdev == NULL) {
 		pr_err("%s: video_device_alloc failed\n", __func__);
 		return rc;
 	}
 
-	/* init video device's driver interface */
+	
 	D("sensor name = %s, sizeof(pvdev->name)=%d\n",
 			pcam->sensor_sdev->name, sizeof(pvdev->name));
 
-	/* device info - strlcpy is safer than strncpy but
-	   only if architecture supports*/
 	strlcpy(pvdev->name, pcam->sensor_sdev->name,
 			sizeof(pvdev->name));
 
@@ -1835,7 +1861,7 @@ int msm_setup_mctl_node(struct msm_cam_v4l2_device *pcam)
 	pvdev->minor	  = -1;
 	pvdev->vfl_type   = 1;
 
-	/* register v4l2 video device to kernel as /dev/videoXX */
+	
 	D("%s video_register_device\n", __func__);
 	rc = video_register_device(pvdev,
 			VFL_TYPE_GRABBER,
@@ -1847,7 +1873,7 @@ int msm_setup_mctl_node(struct msm_cam_v4l2_device *pcam)
 	D("%s: video device registered as /dev/video%d\n",
 			__func__, pvdev->num);
 
-	/* connect pcam and mctl video dev to each other */
+	
 	pcam->mctl_node.pvdev	= pvdev;
 	video_set_drvdata(pcam->mctl_node.pvdev, pcam);
 

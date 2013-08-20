@@ -24,7 +24,6 @@
 #include <mach/panel_id.h>
 #include <mach/board.h>
 #include <mach/debug_display.h>
-#include <mach/htc_battery_common.h>
 
 #include "../devices.h"
 #include "../board-protou.h"
@@ -32,15 +31,19 @@
 #include "../../../../drivers/video/msm/mipi_dsi.h"
 
 static int mipi_power_save_on = 1;
-static int mipi_status = 1;
 static int bl_level_prevset = 0;
+
+static int resume_blk = 0;
+static int mipi_status = 1;
 
 static struct dsi_buf protou_panel_tx_buf;
 static struct dsi_buf protou_panel_rx_buf;
-static struct dsi_cmd_desc *protou_power_on_cmd = NULL;
-static struct dsi_cmd_desc *protou_power_off_cmd = NULL;
-static int protou_power_on_cmd_size = 0;
-static int protou_power_off_cmd_size = 0;
+static struct dsi_cmd_desc *power_on_cmd = NULL;
+static struct dsi_cmd_desc *display_on_cmds = NULL;
+static struct dsi_cmd_desc *display_off_cmds = NULL;
+static int power_on_cmd_size = 0;
+static int display_on_cmds_count = 0;
+static int display_off_cmds_count = 0;
 static char ptype[60] = "Panel Type = ";
 
 #define DEFAULT_BRIGHTNESS 143
@@ -48,7 +51,6 @@ static unsigned int last_brightness = DEFAULT_BRIGHTNESS;
 
 void mdp_color_enhancement(const struct mdp_reg *reg_seq, int size);
 
-/* [DISPLAY]: color enhancement */
 static struct mdp_reg protou_color_v105[] = {
 	{0x93400, 0x0211, 0x0},
 	{0x93404, 0xFFF2, 0x0},
@@ -71,7 +73,6 @@ static struct mdp_reg protou_color_v105[] = {
 	{0x9368C, 0x00FF, 0x0},
 	{0x93690, 0x0000, 0x0},
 	{0x93694, 0x00FF, 0x0},
-	{0x90070, 0xCD298008, 0x0}
 };
 
 static int protou_mdp_color_enhance(void)
@@ -81,7 +82,6 @@ static int protou_mdp_color_enhance(void)
 	return 0;
 }
 
-/* [DISPLAY]: mdp gamma */
 static struct mdp_reg protou_gamma[] = {
 	{0x93800, 0x000000, 0x0},
 	{0x93804, 0x010000, 0x0},
@@ -349,81 +349,69 @@ static int protou_mdp_gamma(void)
 	return 0;
 }
 
-// -----------------------------------------------------------------------------
-//                             Constant value define
-// -----------------------------------------------------------------------------
-static unsigned char led_pwm1[] = {0x51, 0xFF}; /* DTYPE_DCS_WRITE1 */
-static unsigned char bkl_enable_cmds[] = {0x53, 0x24};/* DTYPE_DCS_WRITE1 */
-static unsigned char bkl_disable_cmds[] = {0x53, 0x00};/* DTYPE_DCS_WRITE1 */
-static char enable_cabc[] = {0x55, 0x01}; /* DTYPE_DCS_WRITE1 */
-static char write_cabc_minimum_brightness[] = {0x5E, 0xB3}; /* DTYPE_DCS_WRITE1 */
+static unsigned char led_pwm1[] = {0x51, 0xFF}; 
+static unsigned char bkl_enable_cmds[] = {0x53, 0x24};
+static unsigned char bkl_disable_cmds[] = {0x53, 0x00};
+static char enable_cabc[] = {0x55, 0x01}; 
+static char write_cabc_minimum_brightness[] = {0x5E, 0xB3}; 
 
-static char sleep_out[] = {0x11, 0x00}; /* DTYPE_DCS_WRITE */
-static char display_on[] = {0x29, 0x00}; /* DTYPE_DCS_WRITE */
+static char sleep_out[] = {0x11, 0x00}; 
+static char display_on[] = {0x29, 0x00}; 
 
-static char display_off[2] = {0x28, 0x00}; /* DTYPE_DCS_WRITE */
-static char sleep_in[2] = {0x10, 0x00}; /* DTYPE_DCS_WRITE */
-//static char deep_standby_mode_in[] = {0xC1, 0x01}; /* DTYPE_DCS_WRITE1 */
-//static char sw_reset[2] = {0x01, 0x00}; /* DTYPE_DCS_WRITE */
+static char display_off[2] = {0x28, 0x00}; 
+static char sleep_in[2] = {0x10, 0x00}; 
 
-// -----------------------------------------------------------------------------
-//                             ProtoU LG panel initial setting
-// -----------------------------------------------------------------------------
-static char display_inv[] = {0x20, 0x00}; /* DTYPE_DCS_WRITE */
+static char display_inv[] = {0x20, 0x00}; 
 
-static char set_address_mode[] = {0x36, 0x00}; /* DTYPE_DCS_WRITE1 */
-static char interface_pixel_format[] = {0x3A, 0x70}; /* DTYPE_DCS_WRITE1 */
+static char set_address_mode[] = {0x36, 0x00}; 
+static char interface_pixel_format[] = {0x3A, 0x70}; 
 
 static char panel_characteristics_setting[] = {
-	0xB2, 0x20, 0xC8}; /* DTYPE_DCS_LWRITE */
-static char panel_drive_setting[] = {0xB3, 0x00}; /* DTYPE_DCS_WRITE1 */
-static char display_mode_control[] = {0xB4, 0x04}; /* DTYPE_DCS_WRITE1 */
-static char display_control1[] = {0xB5, 0x20, 0x10, 0x10}; /* DTYPE_DCS_WRITE1 */
+	0xB2, 0x20, 0xC8}; 
+static char panel_drive_setting[] = {0xB3, 0x00}; 
+static char display_mode_control[] = {0xB4, 0x04}; 
+static char display_control1[] = {0xB5, 0x20, 0x10, 0x10}; 
 static char display_control2[] = {
-	0xB6, 0x03, 0x0F, 0x02, 0x40, 0x10, 0xE8}; /* DTYPE_DCS_LWRITE */
+	0xB6, 0x03, 0x0F, 0x02, 0x40, 0x10, 0xE8}; 
 static char internal_oscillator_setting[] = {
-	0xC0, 0x01, 0x18}; /* DTYPE_DCS_LWRITE */
-static char power_control1[] = {0xC1, 0x08}; /* DTYPE_DCS_WRITE1 */
-static char power_control2[] = {0xC2, 0x00}; /* DTYPE_DCS_WRITE1 */
+	0xC0, 0x01, 0x1A}; 
+static char power_control2[] = {0xC2, 0x00}; 
 static char power_control3[] = {
-	0xC3, 0x07, 0x05, 0x05, 0x05, 0x07}; /* DTYPE_DCS_LWRITE */
+	0xC3, 0x07, 0x05, 0x05, 0x05, 0x07}; 
 static char power_control4[] = {
-	0xC4, 0x12, 0x24, 0x12, 0x12, 0x05, 0x4c}; /* DTYPE_DCS_LWRITE */
-static char mtp_vocm[] = {0xF9, 0x40}; /* DTYPE_DCS_WRITE1 */
+	0xC4, 0x12, 0x24, 0x12, 0x12, 0x05, 0x4c}; 
+static char mtp_vocm[] = {0xF9, 0x40}; 
 static char power_control6[] = {
-	0xC6, 0x41, 0x63, 0x03}; /* DTYPE_DCS_LWRITE */
+	0xC6, 0x41, 0x63, 0x03}; 
 
 static char positive_gamma_red[] = {
 	0xD0, 0x03, 0x10, 0x73, 0x07, 0x00, 0x01, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
 static char negative_gamma_red[] = {
 	0xD1, 0x03, 0x10, 0x73, 0x07, 0x00, 0x02, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
 static char positive_gamma_green[] = {
 	0xD2, 0x03, 0x10, 0x73, 0x07, 0x00, 0x01, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
 static char negative_gamma_green[] = {
 	0xD3, 0x03, 0x10, 0x73, 0x07, 0x00, 0x02, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
 static char positive_gamma_blue[] = {
 	0xD4, 0x03, 0x10, 0x73, 0x07, 0x00, 0x01, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
 static char negative_gamma_blue[] = {
 	0xD5, 0x03, 0x10, 0x73, 0x07, 0x00, 0x02, 0x50,
-	0x13, 0x02}; /* DTYPE_DCS_LWRITE */
+	0x13, 0x02}; 
 
-static char disable_high_speed_timeout[] = {0x03, 0x00}; /* DTYPE_GEN_WRITE2 */
+static char disable_high_speed_timeout[] = {0x03, 0x00}; 
 static char backlight_control[] = {
-	0xC8, 0x11, 0x03}; /* DTYPE_DCS_LWRITE */
+	0xC8, 0x11, 0x03}; 
 
-// -----------------------------------------------------------------------------
-//                             ProtoU SHARP panel initial setting
-// -----------------------------------------------------------------------------
 static char pro_001[] = {0xff, 0x80, 0x09, 0x01, 0x01};
 static char pro_002[] = {0x00, 0x80};
 static char pro_003[] = {0xff, 0x80, 0x09};
@@ -501,8 +489,6 @@ static struct dsi_cmd_desc lg_video_on_cmds[] = {
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(internal_oscillator_setting), internal_oscillator_setting},
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
-		sizeof(power_control1), power_control1},
-	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(power_control2), power_control2},
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
 		sizeof(power_control3), power_control3},
@@ -536,13 +522,14 @@ static struct dsi_cmd_desc lg_video_on_cmds[] = {
 		sizeof(display_on), display_on},
 };
 
+static struct dsi_cmd_desc lg_display_on_cmds[] = {
+	{DTYPE_DCS_WRITE, 1, 0, 0, 0,
+		sizeof(display_on), display_on},
+};
+
 static struct dsi_cmd_desc lg_display_off_cmds[] = {
-	{DTYPE_DCS_WRITE, 1, 0, 0, 20,
-		sizeof(display_off), display_off},
-	{DTYPE_DCS_WRITE, 1, 0, 0, 10,
+	{DTYPE_DCS_WRITE, 1, 0, 0, 100,
 		sizeof(sleep_in), sleep_in},
-//	{DTYPE_DCS_WRITE1, 1, 0, 0, 0,
-//		sizeof(deep_standby_mode_in), deep_standby_mode_in}
 };
 
 static struct dsi_cmd_desc sharp_orise_video_on_cmds[] = {
@@ -581,32 +568,6 @@ static struct dsi_cmd_desc orise_display_off_cmds[] = {
 	{DTYPE_DCS_WRITE, 1, 0, 0, 120, sizeof(sleep_in), sleep_in}
 };
 
-/* we don't need read manufacture id*/
-#if 0
-//static char manufacture_id[2] = {0x04, 0x00}; /* DTYPE_DCS_READ */
-
-static struct dsi_cmd_desc lg_manufacture_id_cmd = {
-	DTYPE_DCS_READ, 1, 0, 1, 5, sizeof(manufacture_id), manufacture_id};
-
-static uint32 protou_manufacture_id(struct msm_fb_data_type *mfd)
-{
-	struct dsi_buf *rp, *tp;
-	struct dsi_cmd_desc *cmd;
-	uint32 *lp;
-
-	tp = &protou_panel_tx_buf;
-	rp = &protou_panel_rx_buf;
-	mipi_dsi_buf_init(rp);
-	mipi_dsi_buf_init(tp);
-
-	cmd = &lg_manufacture_id_cmd;
-	mipi_dsi_cmds_rx(mfd, tp, rp, cmd, 3);
-	lp = (uint32 *)rp->data;
-	PR_DISP_INFO("%s: manufacture_id=%x\n", __func__, *lp);
-
-	return *lp;
-}
-#endif
 
 static struct dsi_cmd_desc backlight_cmds[] = {
 	{DTYPE_DCS_LWRITE, 1, 0, 0, 0,
@@ -677,7 +638,7 @@ static void protou_panel_power(int on)
 	} else {
 		msleep(65);
 		gpio_set_value(PROTOU_GPIO_LCD_RST_N, 0);
-		msleep(2);
+		msleep(10);
 		gpio_set_value(PROTOU_GPIO_LCM_1v8_EN, 0);
 		usleep(100);
 		gpio_set_value(PROTOU_GPIO_LCM_3v_EN, 0);
@@ -716,6 +677,7 @@ static struct mipi_dsi_platform_data mipi_dsi_pdata = {
 	.vsync_gpio = 97,
 	.dsi_power_save = mipi_panel_power,
 	.get_lane_config = msm_fb_get_lane_config,
+	.dlane_swap = 0x01,
 };
 
 #define BRI_SETTING_MIN                 30
@@ -754,7 +716,7 @@ static unsigned char protou_shrink_pwm(int val)
 	} else if (val > BRI_SETTING_MAX)
 			shrink_br = pwm_max;
 
-	/*PR_DISP_INFO("brightness orig=%d, transformed=%d\n", val, shrink_br);*/
+	
 
 	return shrink_br;
 }
@@ -775,37 +737,32 @@ static int protou_lcd_on(struct platform_device *pdev)
 
 	mipi  = &mfd->panel_info.mipi;
 
-	if (mfd->init_mipi_lcd == 0) {
-		PR_DISP_INFO("Display On - 1st time\n");
+	if (mfd->first_init_lcd != 0) {
+		printk("Display On - 1st time\n");
 
-		if (panel_type == PANEL_ID_PROTOU_SHARP || panel_type == PANEL_ID_PROTOU_SHARP_C1)
-			mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, protou_power_on_cmd,
-					protou_power_on_cmd_size);
+		if (panel_type == PANEL_ID_PROTOU_SHARP || panel_type == PANEL_ID_PROTOU_SHARP_C1) {
+			mipi_dsi_cmds_tx(&protou_panel_tx_buf, power_on_cmd,
+					power_on_cmd_size);
+		}
 
-		mfd->init_mipi_lcd = 1;
-
+		mfd->first_init_lcd = 0;
+		last_brightness = 0;
 	} else {
-		PR_DISP_INFO("Display On \n");
+		printk("Display On \n");
 		if (panel_type != PANEL_ID_NONE) {
 			PR_DISP_INFO("%s\n", ptype);
 
 			htc_mdp_sem_down(current, &mfd->dma->mutex);
-			mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, protou_power_on_cmd,
-				protou_power_on_cmd_size);
+			mipi_dsi_cmds_tx(&protou_panel_tx_buf, power_on_cmd,
+				power_on_cmd_size);
 			htc_mdp_sem_up(&mfd->dma->mutex);
-#if 0 /* mipi read command verify */
-			/* clean up ack_err_status */
-			mdelay(1000);
-			mipi_dsi_cmd_bta_sw_trigger();
-			protou_manufacture_id(mfd);
-#endif
 		} else {
 			printk(KERN_ERR "panel_type=0x%x not support at power on\n", panel_type);
 			return -EINVAL;
 		}
 	}
-	PR_DISP_DEBUG("Init done!\n");
 
+	PR_DISP_INFO("Init done!\n");
 	return 0;
 }
 
@@ -822,19 +779,13 @@ static int protou_lcd_off(struct platform_device *pdev)
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	if (panel_type != PANEL_ID_NONE) {
-		PR_DISP_INFO("%s\n", ptype);
-		mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, protou_power_off_cmd,
-			protou_power_off_cmd_size);
-	} else
-		printk(KERN_ERR "panel_type=0x%x not support at power off\n",
-			panel_type);
+	resume_blk = 1;
 
 	return 0;
 }
 
-/* ProtoU sharp panel workaround to fix the abnormal wave form  */
-int protou_orise_lcd_pre_off(struct platform_device *pdev) {
+int protou_lcd_off2(struct platform_device *pdev)
+{
 	struct msm_fb_data_type *mfd;
 
 	PR_DISP_INFO("%s\n", __func__);
@@ -846,86 +797,75 @@ int protou_orise_lcd_pre_off(struct platform_device *pdev) {
 	if (mfd->key != MFD_KEY)
 		return -EINVAL;
 
-	mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, orise_display_off_cmds,
+	mipi_dsi_cmds_tx(&protou_panel_tx_buf, display_off_cmds,
+		display_off_cmds_count);
+	resume_blk = 1;
+
+	return 0;
+}
+
+int protou_orise_lcd_pre_off(struct platform_device *pdev) {
+	struct msm_fb_data_type *mfd;
+
+	PR_DISP_INFO("%s\n", __func__);
+
+
+	mfd = platform_get_drvdata(pdev);
+
+	if (!mfd)
+		return -ENODEV;
+	if (mfd->key != MFD_KEY)
+		return -EINVAL;
+
+	mipi_dsi_cmds_tx(&protou_panel_tx_buf, orise_display_off_cmds,
 			ARRAY_SIZE(orise_display_off_cmds));
 
 	return 0;
 }
 
-static int mipi_dsi_set_backlight(struct msm_fb_data_type *mfd)
+static void protou_set_backlight(struct msm_fb_data_type *mfd)
 {
-	struct mipi_panel_info *mipi;
+	PR_DISP_INFO("%s\n", __func__);
 
-	mipi  = &mfd->panel_info.mipi;
+	
+
 	if (mipi_status == 0 || bl_level_prevset == mfd->bl_level) {
 		PR_DISP_DEBUG("Skip the backlight setting > mipi_status : %d, bl_level_prevset : %d, bl_level : %d\n",
 			mipi_status, bl_level_prevset, mfd->bl_level);
-		goto end;
+		return;
 	}
 
 	led_pwm1[1] = protou_shrink_pwm(mfd->bl_level);
 
-	if (mfd->bl_level == 0 || board_mfg_mode() == 4 ||
-	    (board_mfg_mode() == 5 && !(htc_battery_get_zcharge_mode() % 2))) {
+	if (mfd->bl_level == 0) {
 		led_pwm1[1] = 0;
 	}
 
 	htc_mdp_sem_down(current, &mfd->dma->mutex);
-	if (mipi->mode == DSI_VIDEO_MODE) {
-		if (panel_type == PANEL_ID_PROTOU_LG) {
-			/* This is added for LG panel which is needed to use BTA to clear the error happened in driverIC */
-			MIPI_OUTP(MIPI_DSI_BASE + 0xA8, 0x10000000);
-			mipi_dsi_cmd_bta_sw_trigger();
+	if (panel_type == PANEL_ID_PROTOU_LG) {
+		
+		MIPI_OUTP(MIPI_DSI_BASE + 0xA8, 0x10000000);
+		mipi_dsi_cmd_bta_sw_trigger();
 
-			/* Need to send blk disable cmd to turn off backlight, or it will change to dim brightness even sending 0 brightness */
-			if (led_pwm1[1] == 0)
-				mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, lg_bkl_disable_cmds,
-					ARRAY_SIZE(lg_bkl_disable_cmds));
-			else if (bl_level_prevset == 0)
-				mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, lg_bkl_enable_cmds,
-					ARRAY_SIZE(lg_bkl_enable_cmds));
+		
+		if (led_pwm1[1] == 0) {
+				mipi_dsi_cmds_tx(&protou_panel_tx_buf, lg_bkl_disable_cmds,1 );
+		} else if (bl_level_prevset == 0) {
+				mipi_dsi_cmds_tx(&protou_panel_tx_buf, lg_bkl_enable_cmds, 4);
 		}
-		mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, backlight_cmds,
-			ARRAY_SIZE(backlight_cmds));
-	} else {
-		mipi_dsi_op_mode_config(DSI_CMD_MODE);
-		mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, backlight_cmds,
-			ARRAY_SIZE(backlight_cmds));
 	}
+
+	mipi_dsi_cmds_tx(&protou_panel_tx_buf, backlight_cmds, 1);
+	bl_level_prevset = mfd->bl_level;
 	htc_mdp_sem_up(&mfd->dma->mutex);
 
-	bl_level_prevset = mfd->bl_level;
-
-	/* Record the last value which was not zero for resume use */
+	
 	if (mfd->bl_level >= BRI_SETTING_MIN)
 		last_brightness = mfd->bl_level;
 
 	PR_DISP_INFO("mipi_dsi_set_backlight > set brightness to %d(%d)\n", led_pwm1[1], mfd->bl_level);
-end:
-	return 0;
-}
 
-static void protou_set_backlight(struct msm_fb_data_type *mfd)
-{
-	if (!mfd->panel_power_on)
-		return;
-
-	mipi_dsi_set_backlight(mfd);
-}
-
-
-static void protou_display_on(struct msm_fb_data_type *mfd)
-{
-	PR_DISP_INFO("%s+\n", __func__);
-#if 0 /* Skip the display_on cmd transfer for LG panel only */
-	htc_mdp_sem_down(current, &mfd->dma->mutex);
-	if (mfd->panel_info.type == MIPI_CMD_PANEL) {
-		mipi_dsi_op_mode_config(DSI_CMD_MODE);
-	}
-	mipi_dsi_cmds_tx(mfd, &protou_panel_tx_buf, lg_display_on_cmds,
-		ARRAY_SIZE(lg_display_on_cmds));
-	htc_mdp_sem_up(&mfd->dma->mutex);
-#endif
+	return;
 }
 
 static void protou_bkl_switch(struct msm_fb_data_type *mfd, bool on)
@@ -934,25 +874,49 @@ static void protou_bkl_switch(struct msm_fb_data_type *mfd, bool on)
 	if (on) {
 		mipi_status = 1;
 		if (mfd->bl_level == 0)
-			/* Assign the backlight by last brightness before suspend */
 			mfd->bl_level = last_brightness;
-
-		mipi_dsi_set_backlight(mfd);
 	} else {
 		if (bl_level_prevset != 0) {
 			if (bl_level_prevset >= BRI_SETTING_MIN)
 				last_brightness = bl_level_prevset;
 			mfd->bl_level = 0;
-			mipi_dsi_set_backlight(mfd);
+			protou_set_backlight(mfd);
 		}
 		mipi_status = 0;
 	}
+}
+
+
+static void protou_display_on(struct msm_fb_data_type *mfd)
+{
+#if 0
+	htc_mdp_sem_down(current, &mfd->dma->mutex);
+	mipi_dsi_cmds_tx(&protou_panel_tx_buf, display_on_cmds, display_on_cmds_count);
+	htc_mdp_sem_up(&mfd->dma->mutex);
+#endif
+	PR_DISP_INFO("%s\n", __func__);
+}
+
+static void protou_display_off(struct msm_fb_data_type *mfd)
+{
+#if 0
+	cmdreq.cmds = display_off_cmds;
+	cmdreq.cmds_cnt = display_off_cmds_count;
+	cmdreq.flags = CMD_REQ_COMMIT;
+	cmdreq.rlen = 0;
+	cmdreq.cb = NULL;
+
+	mipi_dsi_cmdlist_put(&cmdreq);
+#endif
+	mipi_dsi_cmds_tx(&protou_panel_tx_buf, display_off_cmds, display_off_cmds_count);
+	PR_DISP_INFO("%s\n", __func__);
 }
 
 static int __devinit protou_lcd_probe(struct platform_device *pdev)
 {
 	msm_fb_add_device(pdev);
 
+	PR_DISP_INFO("%s\n", __func__);
 	return 0;
 }
 
@@ -974,7 +938,8 @@ static struct msm_fb_panel_data protou_panel_data = {
 	.off		= protou_lcd_off,
 	.set_backlight  = protou_set_backlight,
 	.display_on  = protou_display_on,
-	.bklswitch	= protou_bkl_switch,
+	.display_off  = protou_display_off,
+	.bklswitch      = protou_bkl_switch,
 };
 
 static int ch_used[3];
@@ -1021,17 +986,17 @@ err_device_put:
 static struct msm_panel_info pinfo;
 
 static struct mipi_dsi_phy_ctrl mipi_dsi_protou_phy_ctrl = {
-	/* DSI Bit Clock at 363 MHz, 2 lane, RGB888*/
-	/* regulator */
+	
+	
 	{0x03, 0x01, 0x01, 0x00},
-	/* timing   */
+	
 	{0xa4, 0x89, 0x14, 0x00, 0x16, 0x8e, 0x18, 0x8b,
 	0x16, 0x03, 0x04},
-	/* phy ctrl */
+	
 	{0x7f, 0x00, 0x00, 0x00},
-	/* strength */
+	
 	{0xff, 0x02, 0x06, 0x00},
-	/* pll control */
+	
 	{0x00, 0x66, 0x31, 0xd2, 0x00, 0x40, 0x37, 0x62,
 	0x01, 0x0f, 0x07,
 	0x05, 0x14, 0x03, 0x0, 0x0, 0x0, 0x20, 0x0, 0x02, 0x0},
@@ -1055,12 +1020,13 @@ static int mipi_video_lg_wvga_pt_init(void)
 	pinfo.lcdc.v_back_porch = 64;
 	pinfo.lcdc.v_front_porch = 38;
 	pinfo.lcdc.v_pulse_width = 8;
-	pinfo.lcdc.border_clr = 0;	/* blk */
-	pinfo.lcdc.underflow_clr = 0xff;	/* blue */
+	pinfo.lcdc.border_clr = 0;	
+	pinfo.lcdc.underflow_clr = 0x00;	
 	pinfo.lcdc.hsync_skew = 0;
 	pinfo.bl_max = 255;
 	pinfo.bl_min = 1;
 	pinfo.fb_num = 2;
+	pinfo.camera_backlight = 238;
 
 	pinfo.mipi.mode = DSI_VIDEO_MODE;
 	pinfo.mipi.pulse_mode_hsa_he = FALSE;
@@ -1077,12 +1043,12 @@ static int mipi_video_lg_wvga_pt_init(void)
 	pinfo.mipi.data_lane1 = TRUE;
 	pinfo.mipi.t_clk_post = 0x20;
 	pinfo.mipi.t_clk_pre = 0x2F;
-	pinfo.mipi.stream = 0; /* dma_p */
+	pinfo.mipi.stream = 0; 
 	pinfo.mipi.mdp_trigger = DSI_CMD_TRIGGER_NONE;
 	pinfo.mipi.dma_trigger = DSI_CMD_TRIGGER_SW;
-	pinfo.mipi.frame_rate = 60;
+	pinfo.mipi.frame_rate = 58;
 	pinfo.mipi.dsi_phy_db = &mipi_dsi_protou_phy_ctrl;
-	pinfo.mipi.dlane_swap = 0x01;
+	
 	pinfo.mipi.tx_eot_append = 0x01;
 
 	ret = mipi_protou_device_register(&pinfo, MIPI_DSI_PRIM,
@@ -1093,10 +1059,12 @@ static int mipi_video_lg_wvga_pt_init(void)
 	strcat(ptype, "PANEL_ID_PROTOU_LG");
 	PR_DISP_INFO("%s: assign initial setting for LG, %s\n", __func__, ptype);
 
-	protou_power_on_cmd = lg_video_on_cmds;
-	protou_power_on_cmd_size = ARRAY_SIZE(lg_video_on_cmds);
-	protou_power_off_cmd = lg_display_off_cmds;
-	protou_power_off_cmd_size = ARRAY_SIZE(lg_display_off_cmds);
+	power_on_cmd = lg_video_on_cmds;
+	power_on_cmd_size = ARRAY_SIZE(lg_video_on_cmds);
+	display_on_cmds = lg_display_on_cmds;
+	display_on_cmds_count = ARRAY_SIZE(lg_display_on_cmds);
+	display_off_cmds = lg_display_off_cmds;
+	display_off_cmds_count = ARRAY_SIZE(lg_display_off_cmds);
 
 	return ret;
 }
@@ -1119,12 +1087,13 @@ static int mipi_video_orise_wvga_pt_init(void)
 	pinfo.lcdc.v_back_porch = 64;
 	pinfo.lcdc.v_front_porch = 38;
 	pinfo.lcdc.v_pulse_width = 8;
-	pinfo.lcdc.border_clr = 0;	/* blk */
-	pinfo.lcdc.underflow_clr = 0xff;	/* blue */
+	pinfo.lcdc.border_clr = 0;	
+	pinfo.lcdc.underflow_clr = 0x00;	
 	pinfo.lcdc.hsync_skew = 0;
 	pinfo.bl_max = 255;
 	pinfo.bl_min = 1;
 	pinfo.fb_num = 2;
+	pinfo.camera_backlight = 238;
 
 	pinfo.mipi.mode = DSI_VIDEO_MODE;
 	pinfo.mipi.pulse_mode_hsa_he = FALSE;
@@ -1141,12 +1110,12 @@ static int mipi_video_orise_wvga_pt_init(void)
 	pinfo.mipi.data_lane1 = TRUE;
 	pinfo.mipi.t_clk_post = 0x20;
 	pinfo.mipi.t_clk_pre = 0x2F;
-	pinfo.mipi.stream = 0; /* dma_p */
+	pinfo.mipi.stream = 0; 
 	pinfo.mipi.mdp_trigger = DSI_CMD_TRIGGER_NONE;
 	pinfo.mipi.dma_trigger = DSI_CMD_TRIGGER_SW;
-	pinfo.mipi.frame_rate = 60;
+	pinfo.mipi.frame_rate = 59;
 	pinfo.mipi.dsi_phy_db = &mipi_dsi_protou_phy_ctrl;
-	pinfo.mipi.dlane_swap = 0x01;
+	
 	pinfo.mipi.tx_eot_append = 0x01;
 
 
@@ -1158,17 +1127,21 @@ static int mipi_video_orise_wvga_pt_init(void)
 	if (panel_type == PANEL_ID_PROTOU_SHARP) {
 		strcat(ptype, "PANEL_ID_PROTOU_SHARP");
 		PR_DISP_INFO("%s: assign initial setting for SHARP, %s\n", __func__, ptype);
-		protou_power_on_cmd = sharp_orise_video_on_cmds;
-		protou_power_on_cmd_size = ARRAY_SIZE(sharp_orise_video_on_cmds);
-		protou_power_off_cmd = orise_display_off_cmds;
-		protou_power_off_cmd_size = ARRAY_SIZE(orise_display_off_cmds);
+		power_on_cmd = sharp_orise_video_on_cmds;
+		power_on_cmd_size = ARRAY_SIZE(sharp_orise_video_on_cmds);
+		display_on_cmds = lg_display_on_cmds;
+		display_on_cmds_count = ARRAY_SIZE(lg_display_on_cmds);
+		display_off_cmds = orise_display_off_cmds;
+		display_off_cmds_count = ARRAY_SIZE(orise_display_off_cmds);
 	} else if (panel_type == PANEL_ID_PROTOU_SHARP_C1) {
 		strcat(ptype, "PANEL_ID_PROTOU_SHARP_C1");
 		PR_DISP_INFO("%s: assign initial setting for SHARP_C1, %s\n", __func__, ptype);
-		protou_power_on_cmd = sharp_C1_orise_video_on_cmds;
-		protou_power_on_cmd_size = ARRAY_SIZE(sharp_C1_orise_video_on_cmds);
-		protou_power_off_cmd = orise_display_off_cmds;
-		protou_power_off_cmd_size = ARRAY_SIZE(orise_display_off_cmds);
+		power_on_cmd = sharp_C1_orise_video_on_cmds;
+		power_on_cmd_size = ARRAY_SIZE(sharp_C1_orise_video_on_cmds);
+		display_on_cmds = lg_display_on_cmds;
+		display_on_cmds_count = ARRAY_SIZE(lg_display_on_cmds);
+		display_off_cmds = orise_display_off_cmds;
+		display_off_cmds_count = ARRAY_SIZE(orise_display_off_cmds);
 	}
 
 	return ret;
@@ -1199,6 +1172,7 @@ static struct platform_device msm_fb_device = {
 };
 
 static struct msm_panel_common_pdata mdp_pdata = {
+	.cont_splash_enabled = 0x00,
 	.gpio = 97,
 	.mdp_rev = MDP_REV_303,
 	.mdp_color_enhance = protou_mdp_color_enhance,
@@ -1217,7 +1191,7 @@ int __init protou_init_panel(void)
 	return 0;
 }
 
-static int __init protou_panel_late_init(void)
+static int __init protou_panel_panel_init(void)
 {
 	mipi_dsi_buf_alloc(&protou_panel_tx_buf, DSI_BUF_SIZE);
 	mipi_dsi_buf_alloc(&protou_panel_rx_buf, DSI_BUF_SIZE);
@@ -1237,4 +1211,4 @@ static int __init protou_panel_late_init(void)
 	return platform_driver_register(&this_driver);
 }
 
-late_initcall(protou_panel_late_init);
+device_initcall_sync(protou_panel_panel_init);

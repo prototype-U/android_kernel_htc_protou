@@ -98,7 +98,7 @@ void msm_camera_io_memcpy(void __iomem *dest_addr,
 	msm_camera_io_dump(dest_addr, len);
 }
 
- /* HTC Angie 20120724 */
+ 
 int msm_cam_clk_try(struct device *dev, const char *clk_name)
 {
 	struct clk *clk = NULL;
@@ -110,7 +110,6 @@ int msm_cam_clk_try(struct device *dev, const char *clk_name)
 	clk_put(clk);
 	return 0;
 }
-/* HTC_END */
 
 int msm_cam_clk_enable(struct device *dev, struct msm_cam_clk_info *clk_info,
 		struct clk **clk_ptr, int num_clk, int enable)
@@ -386,10 +385,9 @@ int msm_camera_config_gpio_table(struct msm_camera_sensor_info *sinfo,
 		}
 	} else {
 		for (i = gpio_conf->cam_gpio_set_tbl_size - 1; i >= 0; i--) {
-			if (gpio_conf->cam_gpio_set_tbl[i].flags)
-				gpio_set_value_cansleep(
-					gpio_conf->cam_gpio_set_tbl[i].gpio,
-					GPIOF_OUT_INIT_LOW);
+			gpio_set_value_cansleep(
+				gpio_conf->cam_gpio_set_tbl[i].gpio,
+				gpio_conf->cam_gpio_set_tbl[i].flags);
 		}
 	}
 	return rc;

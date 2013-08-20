@@ -11,9 +11,11 @@
  *  MMC card bus driver model
  */
 
+#include <linux/export.h>
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/stat.h>
 #include <linux/pm_runtime.h>
 
 #include <linux/mmc/card.h>
@@ -49,11 +51,6 @@ static struct device_attribute mmc_dev_attrs[] = {
 	__ATTR_NULL,
 };
 
-/*
- * This currently matches any MMC driver to any MMC card - drivers
- * themselves make the decision whether to drive this card in their
- * probe method.
- */
 static int mmc_bus_match(struct device *dev, struct device_driver *drv)
 {
 	return 1;
@@ -93,10 +90,6 @@ mmc_bus_uevent(struct device *dev, struct kobj_uevent_env *env)
 	if (retval)
 		return retval;
 
-	/*
-	 * Request the mmc_block device.  Note: that this is a direct request
-	 * for the module it carries no information as to what is inserted.
-	 */
 	retval = add_uevent_var(env, "MODALIAS=mmc:block");
 
 	return retval;
@@ -121,7 +114,7 @@ static int mmc_bus_remove(struct device *dev)
 }
 
 #ifdef CONFIG_PM_SLEEP
-static int mmc_bus_pm_suspend(struct device *dev)
+static int mmc_bus_suspend(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
@@ -132,7 +125,7 @@ static int mmc_bus_pm_suspend(struct device *dev)
 	return ret;
 }
 
-static int mmc_bus_pm_resume(struct device *dev)
+static int mmc_bus_resume(struct device *dev)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = mmc_dev_to_card(dev);
@@ -142,9 +135,13 @@ static int mmc_bus_pm_resume(struct device *dev)
 		ret = drv->resume(card);
 	return ret;
 }
+#else
+#define mmc_bus_suspend NULL
+#define mmc_bus_resume NULL
 #endif
 
 #ifdef CONFIG_PM_RUNTIME
+
 static int mmc_runtime_suspend(struct device *dev)
 {
 	struct mmc_card *card = mmc_dev_to_card(dev);
@@ -163,11 +160,13 @@ static int mmc_runtime_idle(struct device *dev)
 {
 	return pm_runtime_suspend(dev);
 }
-#endif /* CONFIG_PM_RUNTIME */
+
+#endif 
 
 static const struct dev_pm_ops mmc_bus_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(mmc_bus_pm_suspend, mmc_bus_pm_resume)
-	SET_RUNTIME_PM_OPS(mmc_runtime_suspend, mmc_runtime_resume, mmc_runtime_idle)
+	SET_RUNTIME_PM_OPS(mmc_runtime_suspend, mmc_runtime_resume,
+			mmc_runtime_idle)
+	SET_SYSTEM_SLEEP_PM_OPS(mmc_bus_suspend, mmc_bus_resume)
 };
 
 static struct bus_type mmc_bus_type = {
@@ -190,10 +189,6 @@ void mmc_unregister_bus(void)
 	bus_unregister(&mmc_bus_type);
 }
 
-/**
- *	mmc_register_driver - register a media driver
- *	@drv: MMC media driver
- */
 int mmc_register_driver(struct mmc_driver *drv)
 {
 	drv->drv.bus = &mmc_bus_type;
@@ -202,10 +197,6 @@ int mmc_register_driver(struct mmc_driver *drv)
 
 EXPORT_SYMBOL(mmc_register_driver);
 
-/**
- *	mmc_unregister_driver - unregister a media driver
- *	@drv: MMC media driver
- */
 void mmc_unregister_driver(struct mmc_driver *drv)
 {
 	drv->drv.bus = &mmc_bus_type;
@@ -226,9 +217,6 @@ static void mmc_release_card(struct device *dev)
 	kfree(card);
 }
 
-/*
- * Allocate and initialise a new MMC card structure.
- */
 struct mmc_card *mmc_alloc_card(struct mmc_host *host, struct device_type *type)
 {
 	struct mmc_card *card;
@@ -251,17 +239,23 @@ struct mmc_card *mmc_alloc_card(struct mmc_host *host, struct device_type *type)
 	return card;
 }
 
-/*
- * Register a new MMC card with the driver model.
- */
 int mmc_add_card(struct mmc_card *card)
 {
 	int ret;
 	const char *type;
 	const char *uhs_bus_speed_mode = "";
+	static const char *const uhs_speeds[] = {
+		[UHS_SDR12_BUS_SPEED] = "SDR12 ",
+		[UHS_SDR25_BUS_SPEED] = "SDR25 ",
+		[UHS_SDR50_BUS_SPEED] = "SDR50 ",
+		[UHS_SDR104_BUS_SPEED] = "SDR104 ",
+		[UHS_DDR50_BUS_SPEED] = "DDR50 ",
+	};
+
 
 	dev_set_name(&card->dev, "%s:%04x", mmc_hostname(card->host), card->rca);
-	card->sd_removed = 0;
+	card->state &= ~MMC_CARD_REMOVED;
+	card->do_remove = 0;
 
 	switch (card->type) {
 	case MMC_TYPE_MMC:
@@ -289,30 +283,12 @@ int mmc_add_card(struct mmc_card *card)
 		break;
 	}
 
-	if (mmc_sd_card_uhs(card)) {
-		switch (card->sd_bus_speed) {
-		case UHS_SDR104_BUS_SPEED:
-			uhs_bus_speed_mode = "SDR104 ";
-			break;
-		case UHS_SDR50_BUS_SPEED:
-			uhs_bus_speed_mode = "SDR50 ";
-			break;
-		case UHS_DDR50_BUS_SPEED:
-			uhs_bus_speed_mode = "DDR50 ";
-			break;
-		case UHS_SDR25_BUS_SPEED:
-			uhs_bus_speed_mode = "SDR25 ";
-			break;
-		case UHS_SDR12_BUS_SPEED:
-			uhs_bus_speed_mode = "SDR12 ";
-			break;
-		default:
-			uhs_bus_speed_mode = "";
-			break;
-		}
-	}
+	if (mmc_sd_card_uhs(card) &&
+		(card->sd_bus_speed < ARRAY_SIZE(uhs_speeds)))
+		uhs_bus_speed_mode = uhs_speeds[card->sd_bus_speed];
+
 	if (mmc_host_is_spi(card->host)) {
-		printk(KERN_INFO "%s: new %s%s%s card on SPI\n",
+		pr_info("%s: new %s%s%s card on SPI\n",
 			mmc_hostname(card->host),
 			mmc_card_highspeed(card) ? "high speed " : "",
 			mmc_card_ddr_mode(card) ? "DDR " : "",
@@ -320,12 +296,11 @@ int mmc_add_card(struct mmc_card *card)
 	} else {
 		pr_info("%s: new %s%s%s%s%s card at address %04x\n",
 			mmc_hostname(card->host),
-			mmc_sd_card_uhs(card) ? "ultra high speed " :
+			mmc_card_uhs(card) ? "ultra high speed " :
 			(mmc_card_highspeed(card) ? "high speed " : ""),
 			(mmc_card_hs200(card) ? "HS200 " : ""),
 			mmc_card_ddr_mode(card) ? "DDR " : "",
-			uhs_bus_speed_mode,
-			type, card->rca);
+			uhs_bus_speed_mode, type, card->rca);
 	}
 
 #ifdef CONFIG_DEBUG_FS
@@ -341,10 +316,6 @@ int mmc_add_card(struct mmc_card *card)
 	return 0;
 }
 
-/*
- * Unregister a new MMC card with the driver model, and
- * (eventually) free it.
- */
 void mmc_remove_card(struct mmc_card *card)
 {
 #ifdef CONFIG_DEBUG_FS
@@ -352,14 +323,14 @@ void mmc_remove_card(struct mmc_card *card)
 #endif
 
        if (mmc_card_sd(card))
-               card->sd_removed = 1;
+               mmc_card_set_removed(card);
 
 	if (mmc_card_present(card)) {
 		if (mmc_host_is_spi(card->host)) {
-			printk(KERN_INFO "%s: SPI card removed\n",
+			pr_info("%s: SPI card removed\n",
 				mmc_hostname(card->host));
 		} else {
-			printk(KERN_INFO "%s: card %04x removed\n",
+			pr_info("%s: card %04x removed\n",
 				mmc_hostname(card->host), card->rca);
 		}
 		device_del(&card->dev);

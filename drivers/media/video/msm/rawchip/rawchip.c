@@ -12,7 +12,10 @@
  */
 
 #include "rawchip.h"
-//#include "rawchip_spi.h"
+
+#ifdef CONFIG_I2C_CPLD
+#include <linux/i2c/cpld.h>
+#endif
 
 #define MSM_RAWCHIP_NAME "rawchip"
 
@@ -46,18 +49,18 @@ static irqreturn_t yushan_irq_handler(int irq, void *dev_id){
 
 	disable_irq_nosync(MSM_GPIO_TO_INT(rawchipCtrl->pdata->rawchip_intr0));
 
-	//smp_mb();
+	
 	spin_lock_irqsave(&yushan_int.yushan_spin_lock,flags);
-	//CDBG("[CAM] %s detect INT0, interrupt:%d \n",__func__, interrupt);
-	//if (atomic_read(&start_counting))
-	//atomic_set(&yushan_int.frame_count, 1);
-	//smp_mb();
+	
+	
+	
+	
 	atomic_set(&interrupt, 1);
 	CDBG("[CAM] %s after detect INT0, interrupt:%d \n",__func__, atomic_read(&interrupt));
-	//interrupt = 1;
-	//Yushan_ISR();
-	//CDBG("[CAM] %s atomic_set\n",__func__);
-	//Yushan_ClearInterruptEvent(1);
+	
+	
+	
+	
 	wake_up(&yushan_int.yushan_wait);
 	spin_unlock_irqrestore(&yushan_int.yushan_spin_lock,flags);
 
@@ -120,7 +123,7 @@ int rawchip_init_yushan(void)
 		rawchip_init_data.ext_clk = pdata->rawchip_mclk_freq;
 		rawchip_init_data.lane_cnt = data.lane_cnt;
 		rawchip_init_data.orientation = orientation;
-		rawchip_init_data.use_ext_1v2 = 1;//pdata->rawchip_use_ext_1v2();
+		rawchip_init_data.use_ext_1v2 = 1;
 		rawchip_init_data.bitrate = (data.pixel_clk * bit_cnt / data.lane_cnt) / 1000000;
 		rawchip_init_data.width = data.width;
 		rawchip_init_data.height = data.height;
@@ -142,6 +145,14 @@ int rawchip_init_yushan(void)
 			rawchip_init_data.width, rawchip_init_data.height,
 			rawchip_init_data.blk_pixels, rawchip_init_data.blk_lines);
 		if (rawchipCtrl->rawchip_init) {
+		#if ((defined CONFIG_I2C_CPLD) && ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY)))
+			rc = cpld_gpio_write(pdata->rawchip_reset, 1);
+			if(rc < 0){
+				pr_err("[CAM]%s: rawchip_reset fail\n", __func__);
+				return rc;
+			}
+			mdelay(1);
+		#else
 			rc = gpio_request(pdata->rawchip_reset, "rawchip");
 			if (rc < 0) {
 				pr_err("GPIO(%d) request failed\n", pdata->rawchip_reset);
@@ -151,7 +162,8 @@ int rawchip_init_yushan(void)
 			mdelay(1);
 			gpio_direction_output(pdata->rawchip_reset, 1);
 			gpio_free(pdata->rawchip_reset);
-			/*Reset_Yushan();*/
+		#endif
+			
 		}
 		for (retry_times = 0; retry_times < 5; retry_times++) {
 			if ((rc = Yushan_sensor_open_init(rawchip_init_data)) == 0)
@@ -211,18 +223,6 @@ static int rawchip_get_dxoprc_frameSetting(struct rawchip_ctrl *raw_dev, void __
 	frameSetting.xOddInc	= sImageChar_context.uwXOddInc;
 	frameSetting.yOddInc	= sImageChar_context.uwXOddInc;
 	frameSetting.binning	= sImageChar_context.bBinning;
-/*
-	pr_err("[CAM] prcDxO orientation :	%d\n",frameSetting.orientation);
-	pr_err("[CAM] prcDxO xStart : 		%d\n",frameSetting.xStart);
-	pr_err("[CAM] prcDxO yStart : 		%d\n",frameSetting.yStart);
-	pr_err("[CAM] prcDxO xEnd : 		%d\n",frameSetting.xEnd);
-	pr_err("[CAM] prcDxO yEnd : 		%d\n",frameSetting.yEnd);
-	pr_err("[CAM] prcDxO xEvenInc : 	%d\n",frameSetting.xEvenInc);
-	pr_err("[CAM] prcDxO yEvenInc : 	%d\n",frameSetting.yEvenInc);
-	pr_err("[CAM] prcDxO xOddInc : 		%d\n",frameSetting.xOddInc);
-	pr_err("[CAM] prcDxO yOddInc : 		%d\n",frameSetting.yOddInc);
-	pr_err("[CAM] prcDxO binning : 		%d\n",frameSetting.binning);
-*/
 	if (copy_from_user(&se, arg,
 			sizeof(struct rawchip_stats_event_ctrl))) {
 		pr_err("[CAM] %s, ERR_COPY_FROM_USER\n", __func__);
@@ -289,15 +289,6 @@ static int rawchip_get_interrupt(struct rawchip_ctrl *raw_dev, void __user *arg)
 			Yushan_Status_Snapshot();
 			Yushan_dump_Dxo();
 		}
-	}
-	if (interrupt_type & RAWCHIP_INT_TYPE_RESET_YUSHAN) {
-		pr_info("Reset Yushan\n");
-		rawchipCtrl->sdata.sensor_stop_stream(rawchipCtrl->sdata.s_ctrl);
-		mdelay(30);
-		Reset_Yushan();
-		rawchipCtrl->rawchip_init = 0;
-		rawchip_init_yushan();
-		rawchipCtrl->sdata.sensor_start_stream(rawchipCtrl->sdata.s_ctrl);
 	}
 	se.type = 10;
 	se.length = sizeof(interrupt_type);
@@ -564,11 +555,11 @@ void test_spi(void)
 	int n;
 
 	i = 0;
-	//SPI_Write(0x0808, 1 , &i);
+	
 	yushan_spi_write(0x0808, 0x0);
 	mdelay(10);
 	SPI_Read(0x0808, 1, (uint8_t *)(&tmp));
-	//mdelay(10);
+	
 	if(i != tmp){
 		printk("SPI test fail 1: i %x read tmp is %x\n",i, tmp);
 		return;
@@ -578,45 +569,44 @@ void test_spi(void)
 for(n=0;n<5;n++){
 	pr_info("spi test loop count=%d\n",n);
 	i = 0x66;
-	//SPI_Write(0x0808, 1 , &i);
+	
 	yushan_spi_write(0x0808, i);
 	mdelay(10);
 	SPI_Read(0x808, 1, (uint8_t *)(&tmp));
-	//mdelay(10);
+	
 	if(i != tmp){
 		printk("SPI test fail 2: i %x read tmp is %x\n",i, tmp);
-		//return;
+		
 	}else{
 	    pr_info("SPI test write %x :OK\n",i);
 	}
 
 	i = 0x55;
-	//SPI_Write(0x0808, 1 , &i);
+	
 	yushan_spi_write(0x0808, i);
 	mdelay(10);
 	SPI_Read(0x0808, 1, (uint8_t *)(&tmp));
-	//mdelay(10);
+	
 	if(i != tmp){
 		printk("SPI test fail 3: i %x read tmp is %x\n",i, tmp);
-		//return;
+		
 	}else{
 			pr_info("SPI test write %x :OK\n",i);
 	}
 
 	i = 0xaa;
-//	SPI_Write(0x0808, 1 , &i);
 	yushan_spi_write(0x0808, i);
 	mdelay(10);
 	SPI_Read(0x0808, 1, (uint8_t *)(&tmp));
-	//mdelay(10);
+	
 	if(i != tmp){
 		printk("SPI test fail 4: i %x read tmp is %x\n",i, tmp);
-		//return;
+		
 	}else{
 			pr_info("SPI test write %x :OK\n",i);
 	}
 }
-	//printk("SPI test ok====================\n");
+	
 #endif
 }
 
@@ -640,8 +630,17 @@ int rawchip_power_up(const struct msm_camera_rawchip_info *pdata)
 		pr_err("[CAM] enable MCLK failed\n");
 		goto enable_mclk_failed;
 	}
-	mdelay(1); /*Mu Lee for sequence with raw chip 20120116*/
+	mdelay(1); 
 
+#if ((defined CONFIG_I2C_CPLD) && ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY)))
+	pr_info("[CAM]%s rawchip reset High", __func__);
+	rc = cpld_gpio_write(pdata->rawchip_reset, 1);
+	if(rc < 0){
+		pr_err("[CAM]%s: rawchip_reset fail\n", __func__);
+		goto enable_reset_failed;
+	}
+	mdelay(1);
+#else
 	rc = gpio_request(pdata->rawchip_reset, "rawchip");
 	if (rc < 0) {
 		pr_err("GPIO(%d) request failed\n", pdata->rawchip_reset);
@@ -651,10 +650,16 @@ int rawchip_power_up(const struct msm_camera_rawchip_info *pdata)
 	pr_info("[CAM]%s rawchip reset High", __func__);
 	gpio_direction_output(pdata->rawchip_reset, 1);
 	gpio_free(pdata->rawchip_reset);
-	mdelay(1); /*Mu Lee for sequence with raw chip 20120116*/
+	mdelay(1); 
+#endif
 
 	yushan_spi_write(0x0008, 0x7f);
 	mdelay(1);
+
+{
+	uint16_t uwSpiData = 0x1E00;
+	SPI_Write(0x1018, 2, (unsigned char*)&uwSpiData);
+}
 
 	return rc;
 
@@ -674,12 +679,21 @@ int rawchip_power_down(const struct msm_camera_rawchip_info *pdata)
 	int rc = 0;
 	CDBG("%s\n", __func__);
 
+#if ((defined CONFIG_I2C_CPLD) && ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY)))
+	pr_info("[CAM]%s rawchip reset Low", __func__);
+	rc = cpld_gpio_write(pdata->rawchip_reset, 0);
+	if(rc < 0){
+		pr_err("[CAM]%s: rawchip_reset fail\n", __func__);
+		return rc;
+	}
+#else
 	rc = gpio_request(pdata->rawchip_reset, "rawchip");
 	if (rc < 0)
 		pr_err("GPIO(%d) request failed\n", pdata->rawchip_reset);
 	pr_info("[CAM]%s rawchip reset Low", __func__);
 	gpio_direction_output(pdata->rawchip_reset, 0);
 	gpio_free(pdata->rawchip_reset);
+#endif
 
 	mdelay(1);
 
@@ -699,7 +713,7 @@ int rawchip_power_down(const struct msm_camera_rawchip_info *pdata)
 	return rc;
 }
 
-//extern uint32_t rawchip_id;
+extern uint32_t rawchip_id;
 
 int rawchip_match_id(void)
 {
@@ -725,6 +739,8 @@ int rawchip_match_id(void)
 		}
 		if (rc < 0)
 			continue;
+        else
+            rawchip_id = chipid;
 
 		pr_info("rawchip id: 0x%x requested id: 0x%x\n", chipid, rawchip_info.rawchip_id_info->rawchip_id);
 		if (chipid != rawchip_info.rawchip_id_info->rawchip_id) {
@@ -778,7 +794,7 @@ int rawchip_open_init(void)
 	atomic_set(&interrupt, 0);
 	atomic_set(&interrupt2, 0);
 
-	/*create irq*/
+	
 	rc = request_irq(MSM_GPIO_TO_INT(pdata->rawchip_intr0), yushan_irq_handler,
 		IRQF_TRIGGER_HIGH, "yushan_irq", 0);
 	if (rc < 0) {

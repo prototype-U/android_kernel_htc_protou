@@ -275,23 +275,20 @@ static int msm_csic_init(struct v4l2_subdev *sd, uint32_t *csic_version)
 		return rc;
 	}
 
-/* HTC_START Angie 20120724 */
-	if (msm_cam_clk_try(&csic_dev->pdev->dev, csic_8x_clk_info[0].clk_name) == 0) {
-		csic_dev->hw_version = CSIC_8X;
-		rc = msm_cam_clk_enable(&csic_dev->pdev->dev, csic_8x_clk_info,
-			csic_dev->csic_clk, ARRAY_SIZE(csic_8x_clk_info), 1);
-	} else {
+	csic_dev->hw_version = CSIC_8X;
+	rc = msm_cam_clk_enable(&csic_dev->pdev->dev, csic_8x_clk_info,
+		csic_dev->csic_clk, ARRAY_SIZE(csic_8x_clk_info), 1);
+	if (rc < 0) {
 		csic_dev->hw_version = CSIC_7X;
 		rc = msm_cam_clk_enable(&csic_dev->pdev->dev, csic_7x_clk_info,
 			csic_dev->csic_clk, ARRAY_SIZE(csic_7x_clk_info), 1);
+		if (rc < 0) {
+			csic_dev->hw_version = 0;
+			iounmap(csic_dev->base);
+			csic_dev->base = NULL;
+			return rc;
+		}
 	}
-	if (rc < 0) {
-		csic_dev->hw_version = 0;
-		iounmap(csic_dev->base);
-		csic_dev->base = NULL;
-		return rc;
-	}
-/* HTC_END */
 	if (csic_dev->hw_version == CSIC_7X)
 		msm_camio_vfe_blk_reset_3();
 

@@ -1,5 +1,4 @@
-/*#define DEBUG*/
-#define pr_fmt(fmt) "[CPLD] " fmt
+#define pr_fmt(fmt) "[SPI CPLD] " fmt
 #define pr_error(fmt) pr_err("ERROR: " fmt)
 
 #include <linux/module.h>
@@ -15,14 +14,17 @@
 #include <linux/slab.h>
 #include <linux/delay.h>
 
+#ifdef CONFIG_MACH_DUMMY
+#include "../../arch/arm/mach-msm/board-protodcg.h"
+#elif (defined CONFIG_MACH_DUMMY)
+#include "../../arch/arm/mach-msm/board-cp3dcg.h"
+#elif (defined CONFIG_MACH_DUMMY)
+#include "../../arch/arm/mach-msm/board-cp3dug.h"
+#elif (defined CONFIG_MACH_DUMMY)
+#include "../../arch/arm/mach-msm/board-cp3dtg.h"
+#endif
 
-//0117
-//#include <mach/clk.h>
-//#include <mach/socinfo.h>
 
-//#include "proc_comm.h"
-//#include "clock.h"
-//#include "mach-msm/clock-pcom.h"
 
 #define CPLD_BUFSIZ		128
 
@@ -61,14 +63,14 @@ struct cpld_driver {
 
 typedef volatile struct _cpld_reg_ {
 
-	unsigned short tx_buffer1_cs_low;	//0x0
-	unsigned short tx_buffer2_cs_low;	//0x2
-	unsigned short version1_1;		//0x4
-	unsigned short rx_buffer1_cs_low;	//0x6
-	unsigned short tx_buffer1_cs_high;	//0x8
-	unsigned short tx_buffer2_cs_high;	//0xA
-	unsigned short version1_2;		//0xC
-	unsigned short rx_buffer1_cs_high;	//0xE
+	unsigned short tx_buffer1_cs_low;	
+	unsigned short tx_buffer2_cs_low;	
+	unsigned short version1_1;		
+	unsigned short rx_buffer1_cs_low;	
+	unsigned short tx_buffer1_cs_high;	
+	unsigned short tx_buffer2_cs_high;	
+	unsigned short version1_2;		
+	unsigned short rx_buffer1_cs_high;	
 
 } cpld_reg, *p_cpld_reg;
 
@@ -89,21 +91,80 @@ static struct cpld_driver *g_cpld;
 #define GPIO_SPI 0
 #define EBI2_SPI 1
 
+#ifdef CONFIG_MACH_DUMMY
+#define EBI2_ADDR_0    PROTODCG_GPIO_ADDR_0
+#define EBI2_ADDR_1    PROTODCG_GPIO_ADDR_1
+#define EBI2_ADDR_2    PROTODCG_GPIO_ADDR_2
+#define EBI2_DATA_0    PROTODCG_GPIO_DATA_0
+#define EBI2_DATA_1    PROTODCG_GPIO_DATA_1
+#define EBI2_DATA_2    PROTODCG_GPIO_DATA_2
+#define EBI2_DATA_3    PROTODCG_GPIO_DATA_3
+#define EBI2_DATA_4    PROTODCG_GPIO_DATA_4
+#define EBI2_DATA_5    PROTODCG_GPIO_DATA_5
+#define EBI2_DATA_6    PROTODCG_GPIO_DATA_6
+#define EBI2_DATA_7    PROTODCG_GPIO_DATA_7
+#define EBI2_OE        PROTODCG_GPIO_OE
+#define EBI2_WE        PROTODCG_GPIO_WE
+#elif (defined CONFIG_MACH_DUMMY)
+#define EBI2_ADDR_0    CP3DCG_GPIO_ADDR_0
+#define EBI2_ADDR_1    CP3DCG_GPIO_ADDR_1
+#define EBI2_ADDR_2    CP3DCG_GPIO_ADDR_2
+#define EBI2_DATA_0    CP3DCG_GPIO_DATA_0
+#define EBI2_DATA_1    CP3DCG_GPIO_DATA_1
+#define EBI2_DATA_2    CP3DCG_GPIO_DATA_2
+#define EBI2_DATA_3    CP3DCG_GPIO_DATA_3
+#define EBI2_DATA_4    CP3DCG_GPIO_DATA_4
+#define EBI2_DATA_5    CP3DCG_GPIO_DATA_5
+#define EBI2_DATA_6    CP3DCG_GPIO_DATA_6
+#define EBI2_DATA_7    CP3DCG_GPIO_DATA_7
+#define EBI2_OE        CP3DCG_GPIO_OE
+#define EBI2_WE        CP3DCG_GPIO_WE
+#elif (defined CONFIG_MACH_DUMMY)
+#define EBI2_ADDR_0    CP3DUG_GPIO_ADDR_0
+#define EBI2_ADDR_1    CP3DUG_GPIO_ADDR_1
+#define EBI2_ADDR_2    CP3DUG_GPIO_ADDR_2
+#define EBI2_DATA_0    CP3DUG_GPIO_DATA_0
+#define EBI2_DATA_1    CP3DUG_GPIO_DATA_1
+#define EBI2_DATA_2    CP3DUG_GPIO_DATA_2
+#define EBI2_DATA_3    CP3DUG_GPIO_DATA_3
+#define EBI2_DATA_4    CP3DUG_GPIO_DATA_4
+#define EBI2_DATA_5    CP3DUG_GPIO_DATA_5
+#define EBI2_DATA_6    CP3DUG_GPIO_DATA_6
+#define EBI2_DATA_7    CP3DUG_GPIO_DATA_7
+#define EBI2_OE        CP3DUG_GPIO_OE
+#define EBI2_WE        CP3DUG_GPIO_WE
+#elif (defined CONFIG_MACH_DUMMY)
+#define EBI2_ADDR_0    CP3DTG_GPIO_ADDR_0
+#define EBI2_ADDR_1    CP3DTG_GPIO_ADDR_1
+#define EBI2_ADDR_2    CP3DTG_GPIO_ADDR_2
+#define EBI2_DATA_0    CP3DTG_GPIO_DATA_0
+#define EBI2_DATA_1    CP3DTG_GPIO_DATA_1
+#define EBI2_DATA_2    CP3DTG_GPIO_DATA_2
+#define EBI2_DATA_3    CP3DTG_GPIO_DATA_3
+#define EBI2_DATA_4    CP3DTG_GPIO_DATA_4
+#define EBI2_DATA_5    CP3DTG_GPIO_DATA_5
+#define EBI2_DATA_6    CP3DTG_GPIO_DATA_6
+#define EBI2_DATA_7    CP3DTG_GPIO_DATA_7
+#define EBI2_OE        CP3DTG_GPIO_OE
+#define EBI2_WE        CP3DTG_GPIO_WE
+#endif
 
 static void clock_setting(struct cpld_driver *cpld, int enable)
 {
 	pr_info("%s\n", __func__);
 	
 	if (cpld) {
-		pr_info("CPLD true: call clock_set(%d)\n", enable);
-		cpld->pdata->clock_set(enable);
+		if(cpld->pdata->clock_set){
+			pr_info("CPLD true: call clock_set(%d)\n", enable);
+			cpld->pdata->clock_set(enable);
 
-		if(enable) {
-			writel(0x01, cpld->sdc4_base);			/* MCI_POWER */
-			writel(0x18100, cpld->sdc4_base + 0x04);	/* MCI_CLK */
-		} else {
-			writel(0x00, cpld->sdc4_base);			/* MCI_POWER */
-			writel(0x08000, cpld->sdc4_base + 0x04);	/* MCI_CLK */
+			if(enable) {
+				writel(0x01, cpld->sdc4_base);			
+				writel(0x18100, cpld->sdc4_base + 0x04);	
+			} else {
+				writel(0x00, cpld->sdc4_base);			
+				writel(0x08000, cpld->sdc4_base + 0x04);	
+			}
 		}
 	}
 	else
@@ -114,8 +175,8 @@ static void clock_setting(struct cpld_driver *cpld, int enable)
 
 int spi_set_route(int path)
 {
+#if !((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
 	struct cpld_driver *cpld = g_cpld;
-//    int gpio = cpld->pdata->intf_select;
 
 	clock_setting(cpld, 1);
 	
@@ -132,7 +193,7 @@ int spi_set_route(int path)
 	}
 
 	pr_info("TMUX_EBI2: 0x%08x\n", readl(cpld->cfg_base));
-	
+#endif
 	return 0;
 }
 
@@ -215,7 +276,7 @@ static cpld_gpiospi_single_write(struct cpld_driver *cpld,
 	xfer->tx_buf = buf;
 	xfer->rx_buf = NULL;
 
-	/*spi_message_add_tail(&cpld.xfer, &cpld.msg);*/
+	
 
 	err = spi_sync(spi, msg);
 
@@ -355,6 +416,13 @@ int gpio_spi_read(int length, unsigned char *buffer)
 }
 EXPORT_SYMBOL(gpio_spi_read);
 
+
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+#define DEBUG 0
+#define GPIOHACK 0
+#define GPIO_DIRECTION_OPTIMIZE 0
+#endif
+
 #if 1
 int cpld_spi_write(int length, unsigned char *buffer)
 {
@@ -364,10 +432,27 @@ int cpld_spi_write(int length, unsigned char *buffer)
 	unsigned short byte_low = 0;
 	int i = 0;
 	int len = 0;
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+	unsigned mask[]={EBI2_ADDR_0, EBI2_ADDR_1, EBI2_ADDR_2, EBI2_DATA_0, EBI2_DATA_1, EBI2_DATA_2, EBI2_DATA_3, EBI2_DATA_4, EBI2_DATA_5, EBI2_DATA_6, EBI2_DATA_7, EBI2_OE, EBI2_WE, 0};
+	int     value[]={  1, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0};
+#endif
 
 	len = length;
 	
-	//pr_info("===start to write!===, len:%d\n", len);
+	
 	
 	if (!buffer || len <= 0) {
 		pr_info("The parameter is wrong!\n");
@@ -378,7 +463,7 @@ int cpld_spi_write(int length, unsigned char *buffer)
 	
 	for (i = 0; i < len; i++) {
 		#if 1
-		//pr_info("cpld_spi_write(): no offset\n");
+		
 		byte_low =  (*pBuf) & 0x00ff;
 		byte_high = ((*pBuf) & 0xff00);
 		#else
@@ -391,6 +476,82 @@ int cpld_spi_write(int length, unsigned char *buffer)
 		pr_info("*pBuf:0x%x, byte_high:0x%x, byte_low:0x%x\n", *pBuf, byte_high, byte_low);			
 		pr_info("*pBuf:0x%x, data:0x%x, tx_buff_num:%d\n", *pBuf, data, g_cpld_manager.current_tx_buf_num);
 #endif
+
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+		
+		
+		mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+		
+		mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+		mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+		
+		mask[11]= EBI2_OE;
+		
+		mask[12]= EBI2_WE;
+		
+		mask[13]= 0;
+		
+		*(value +0) = 1;
+		*(value +1) = 0;
+		
+		if (i == (len -1))	*(value + 2) = 1;
+		else *(value + 2) = 0;
+		
+		*(value +3) = (*pBuf) & 0x0001;
+		*(value +4) = ((*pBuf) & 0x0002) >> 1;
+		*(value +5) = ((*pBuf) & 0x0004) >> 2;
+		*(value +6) = ((*pBuf) & 0x0008) >> 3;
+		*(value +7) = ((*pBuf) & 0x0010) >> 4;
+		*(value +8) = ((*pBuf) & 0x0020) >> 5;
+		*(value +9) = ((*pBuf) & 0x0040) >> 6;
+		*(value +10) = ((*pBuf) & 0x0080) >> 7;
+		
+		*(value +11) = 1;
+		
+		*(value +12) = 0;
+#if 0
+#endif
+		gpio_set_value_array(mask,value);
+
+#if GPIOHACK
+		
+		mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+		
+		mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+		mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+		
+		mask[11]= EBI2_OE;
+		
+		mask[12]= EBI2_WE;
+		
+		mask[13]= 0;
+
+
+		*(value +0) = 1;
+		*(value +1) = 0;
+		
+		if (i == (len -1))	*(value + 2) = 1;
+		else *(value + 2) = 0;
+		
+		*(value +3) = (*pBuf) & 0x0001;
+		*(value +4) = ((*pBuf) & 0x0002) >> 1;
+		*(value +5) = ((*pBuf) & 0x0004) >> 2;
+		*(value +6) = ((*pBuf) & 0x0008) >> 3;
+		*(value +7) = ((*pBuf) & 0x0010) >> 4;
+		*(value +8) = ((*pBuf) & 0x0020) >> 5;
+		*(value +9) = ((*pBuf) & 0x0040) >> 6;
+		*(value +10) = ((*pBuf) & 0x0080) >> 7;
+		
+		*(value +11) = 1;
+		
+		*(value +12) = 1;
+#if 0
+#endif
+		gpio_set_value_array(mask,value);
+#endif
+		pBuf++;
+
+#else
 		if (i == (len - 1)) {
 			if (tx_buffer_1 == g_cpld_manager.current_tx_buf_num)
 			{
@@ -431,9 +592,10 @@ int cpld_spi_write(int length, unsigned char *buffer)
 
 		udelay(1);
 		pBuf++;
+#endif
 	}
 
-	//pr_info("===end to write!===\n");
+	
 	
 	return len;
 }
@@ -441,13 +603,13 @@ int cpld_spi_write(int length, unsigned char *buffer)
 #else
 int cpld_ebi2spi_write(unsigned char *buf, int len)
 {
-	/*struct cpld_driver *cpld = g_cpld;*/
+	
 	int i;
 
 	switch_interface(INTF_SPI);
 
 	for (i = 0; i < len; i++) {
-		;	/* TODO: Write ebi2 data here */
+		;	
 	}
 
 	switch_interface(INTF_UART);
@@ -469,12 +631,36 @@ int cpld_spi_read(int length, unsigned char *buffer)
     int count = 0;
 	int write_count = 0;
 	int len = 0;
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+	unsigned mask[]={EBI2_ADDR_0, EBI2_ADDR_1, EBI2_ADDR_2, EBI2_DATA_0, EBI2_DATA_1, EBI2_DATA_2, EBI2_DATA_3, EBI2_DATA_4, EBI2_DATA_5, EBI2_DATA_6, EBI2_DATA_7, EBI2_OE, EBI2_WE, 0};
+	int     value[]={  1, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0, 
+					   0};
+#if GPIO_DIRECTION_OPTIMIZE
+	unsigned inputmask[]={EBI2_DATA_0, EBI2_DATA_1, EBI2_DATA_1, EBI2_DATA_3, EBI2_DATA_4, EBI2_DATA_5, EBI2_DATA_6, EBI2_DATA_7, 0};
+#endif
+#if DEBUG
+	unsigned *masks;
+	int *values;
+#endif
+#endif
 
 	len = length;
 
 	write_count = 3;
 
-	//pr_info("===read=== len:%d\n", len);
+	
 	 
 	if (!buffer || len <= (write_count + 1)) {
 		pr_error("The parameter is wrong!\n");
@@ -486,12 +672,12 @@ int cpld_spi_read(int length, unsigned char *buffer)
 	cpld_spi_write(write_count, pBuf);
 
 
-	//pr_info("===start to write addrewss for reading!===\n");
+	
 	count = len - write_count;
 	pBuf = pBuf + write_count;
 #if 1
-	//byte_low =  (*pBuf) & 0x003f;
-	//byte_high = ((*pBuf) & 0x00c0);
+	
+	
 	byte_low =  (*pBuf);
 	byte_high = ((*pBuf));
 
@@ -507,6 +693,246 @@ int cpld_spi_read(int length, unsigned char *buffer)
 	pr_info("*pBuf:0x%x, byte_high:0x%x, byte_low:0x%x\n", *pBuf, byte_high, byte_low);					
 	pr_info("*pBuf:0x%x, data:0x%x\n", *pBuf, data);
 #endif
+
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+	
+	mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+	
+	mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+	mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+	
+	mask[11]= EBI2_OE;
+	
+	mask[12]= EBI2_WE;
+	
+	mask[13]= 0;
+
+
+	*(value +0) = 1;
+	*(value +1) = 0;
+	
+	*(value + 2) = 0;
+	
+	*(value +3) = (*pBuf) & 0x0001;
+	*(value +4) = ((*pBuf) & 0x0002) >> 1;
+	*(value +5) = ((*pBuf) & 0x0004) >> 2;
+	*(value +6) = ((*pBuf) & 0x0008) >> 3;
+	*(value +7) = ((*pBuf) & 0x0010) >> 4;
+	*(value +8) = ((*pBuf) & 0x0020) >> 5;
+	*(value +9) = ((*pBuf) & 0x0040) >> 6;
+	*(value +10) = ((*pBuf) & 0x0080) >> 7;
+	
+	*(value +11) = 1;
+	
+	*(value +12) = 0;
+#if DEBUG
+	printk("Simon 0\n");
+	for ( masks = mask,values = value; *masks; masks++,values++ ){
+		printk("{%3d} ",*masks);
+	}
+	printk("\n");
+	for ( masks = mask,values = value; *masks; masks++,values++ ){
+		printk("{%3d} ",*values);
+	}
+	printk("\n");
+#endif
+	gpio_set_value_array(mask,value);
+
+#if GPIOHACK
+	
+	mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+	
+	mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+	mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+	
+	mask[11]= EBI2_OE;
+	
+	mask[12]= EBI2_WE;
+	
+	mask[13]= 0;
+
+
+	*(value +0) = 1;
+	*(value +1) = 0;
+	
+	*(value + 2) = 0;
+	
+	*(value +3) = (*pBuf) & 0x0001;
+	*(value +4) = ((*pBuf) & 0x0002) >> 1;
+	*(value +5) = ((*pBuf) & 0x0004) >> 2;
+	*(value +6) = ((*pBuf) & 0x0008) >> 3;
+	*(value +7) = ((*pBuf) & 0x0010) >> 4;
+	*(value +8) = ((*pBuf) & 0x0020) >> 5;
+	*(value +9) = ((*pBuf) & 0x0040) >> 6;
+	*(value +10) = ((*pBuf) & 0x0080) >> 7;
+	
+	*(value +11) = 1;
+	
+	*(value +12) = 1;
+	gpio_set_value_array(mask,value);
+#endif
+#if DEBUG
+#endif
+	pBuf++;
+	count--;
+
+	if (!count) {
+		pr_info("failed. count==0.\n");
+		return (-1);
+	}
+#if GPIO_DIRECTION_OPTIMIZE
+	gpio_direction_input_array(inputmask);
+#else
+	
+	gpio_direction_input(EBI2_DATA_0);
+
+	gpio_direction_input(EBI2_DATA_1);
+
+	gpio_direction_input(EBI2_DATA_2);
+
+	gpio_direction_input(EBI2_DATA_3);
+
+	gpio_direction_input(EBI2_DATA_4);
+
+	gpio_direction_input(EBI2_DATA_5);
+
+	gpio_direction_input(EBI2_DATA_6);
+
+	gpio_direction_input(EBI2_DATA_7);
+#endif
+
+#if DEBUG
+#endif
+
+	for (i = 0; i < count; i++) {
+			byte_high = (data & 0xff00);
+			byte_low = data & 0x00ff;
+			*pBuf = (unsigned char)(byte_low | byte_high);
+
+#if DEBUG
+#endif
+
+			
+			mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+			
+			mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+			mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+			
+			mask[11]= EBI2_OE;
+			
+			mask[12]= EBI2_WE;
+			
+			mask[13]= 0;
+
+
+			*(value +0) = 1;
+			*(value +1) = 0;
+			
+			if (i == (count -1))	*(value + 2) = 1;
+			else *(value + 2) = 0;
+
+			*(value +3) = 0;
+			*(value +4) = 0;
+			*(value +5) = 0;
+			*(value +6) = 0;
+			*(value +7) = 0;
+			*(value +8) = 0;
+			*(value +9) = 0;
+			*(value +10) = 0;
+			
+			*(value +11) = 0;
+			
+			*(value +12) = 1;
+#if DEBUG
+#endif
+			gpio_set_value_array(mask,value);
+#if DEBUG
+#endif
+			
+			mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+			
+			mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+			mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+			
+			mask[11]= EBI2_OE;
+			
+			mask[12]= EBI2_WE;
+			
+			mask[13]= 0;
+
+			gpio_get_value_array(mask,value);
+#if DEBUG
+#endif
+			(*pBuf)&= 0x0000;
+			(*pBuf)|= *(value +3);
+			(*pBuf)|= (*(value +4) << 1);
+			(*pBuf)|= (*(value +5) << 2);
+			(*pBuf)|= (*(value +6) << 3);
+			(*pBuf)|= (*(value +7) << 4);
+			(*pBuf)|= (*(value +8) << 5);
+			(*pBuf)|= (*(value +9) << 6);
+			(*pBuf)|= (*(value +10) << 7);
+#if DEBUG
+#endif
+#if 1
+			
+			mask[0]= EBI2_ADDR_0;	mask[1]= EBI2_ADDR_1;	mask[2]= EBI2_ADDR_2;
+			
+			mask[3]= EBI2_DATA_0;	mask[4]= EBI2_DATA_1;	mask[5]= EBI2_DATA_2;	mask[6]= EBI2_DATA_3;
+			mask[7]= EBI2_DATA_4;	mask[8]= EBI2_DATA_5;	mask[9]= EBI2_DATA_6;	mask[10]= EBI2_DATA_7;
+			
+			mask[11]= EBI2_OE;
+			
+			mask[12]= EBI2_WE;
+			
+			mask[13]= 0;
+
+
+			*(value +0) = 1;
+			*(value +1) = 0;
+			
+			if (i == (count -1))	*(value + 2) = 1;
+			else *(value + 2) = 0;
+
+			*(value +3) = 0;
+			*(value +4) = 0;
+			*(value +5) = 0;
+			*(value +6) = 0;
+			*(value +7) = 0;
+			*(value +8) = 0;
+			*(value +9) = 0;
+			*(value +10) = 0;
+			
+			*(value +11) = 1;
+			
+			*(value +12) = 1;
+
+#if DEBUG
+#endif
+
+			gpio_set_value_array(mask,value);
+#endif
+
+
+			pBuf++;
+	}
+
+	gpio_direction_output(EBI2_DATA_0, 0);
+
+	gpio_direction_output(EBI2_DATA_1, 0);
+
+	gpio_direction_output(EBI2_DATA_2, 0);
+
+	gpio_direction_output(EBI2_DATA_3, 0);
+
+	gpio_direction_output(EBI2_DATA_4, 0);
+
+	gpio_direction_output(EBI2_DATA_5, 0);
+
+	gpio_direction_output(EBI2_DATA_6, 0);
+
+	gpio_direction_output(EBI2_DATA_7, 0);
+#else
 
 	if (tx_buffer_1 == g_cpld_manager.current_tx_buf_num)
 	{
@@ -525,7 +951,7 @@ int cpld_spi_read(int length, unsigned char *buffer)
 	}
 	udelay(5);
 
-	//pr_info("===end to write addrewss for reading!===\n");
+	
 	
 	pBuf++;
 	count--;
@@ -535,9 +961,9 @@ int cpld_spi_read(int length, unsigned char *buffer)
 		return (-1);
 	}
 
-	//pr_info("===start to read!===\n");
+	
 
-	//udelay(10);
+	
 	
 	for (i = 0; i < count; i++) {
 			
@@ -583,21 +1009,22 @@ int cpld_spi_read(int length, unsigned char *buffer)
 			udelay(5);
 			pBuf++;
 		}
+#endif
 
-		//pr_info("===end to read!===\n");
+		
 		
 		return (0);
 }
 #else
 int cpld_ebi2spi_read(unsigned char *buf, int len)
 {
-	/*struct cpld_driver *cpld = g_cpld;*/
+	
 	int i;
 
 	switch_interface(INTF_SPI);
 
 	for (i = 0; i < len; i++) {
-		;	/* TODO: Read ebi2 data here */
+		;	
 	}
 
 	switch_interface(INTF_UART);
@@ -718,14 +1145,14 @@ static ssize_t gpio_spi_show(struct kobject *kobj,
 	int err;
 	uint8_t data;
 
-	/*err = cpld_gpio_spi_read(cpld->sysfs_buf, cpld->sysfs_cnt);*/
+	
 
 	err = cpld_gpiospi_single_read(cpld, cpld->reg_addr, &data);
 	pr_info("%s: err = %d, rd_data = 0x%x\n", __func__, err, data);
 
-	/*if (err == 0) {*/
-		/*count += sprintb(buf, cpld->sysfs_buf, cpld->sysfs_cnt, NULL);*/
-	/*}*/
+	
+		
+	
 
 	return count;
 }
@@ -804,7 +1231,7 @@ static ssize_t cpld_clock_store(struct kobject *kobj, struct kobj_attribute *att
 static ssize_t cpld_clock_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
-	/*struct cpld_driver *cpld = container_of(kobj, struct cpld_driver, kobj);*/
+	
 
 	pr_info("%s\n", __func__);
 	return 0;
@@ -813,7 +1240,7 @@ static ssize_t cpld_clock_show(struct kobject *kobj,
 static ssize_t switch_store(struct kobject *kobj, struct kobj_attribute *attr,
 					const char *buf, size_t count)
 {
-	/*struct cpld_driver *cpld = container_of(kobj, struct cpld_driver, kobj);*/
+	
 
 	pr_info("%s. switch to ebi2 or uart2dm:%s.\n", __func__, &buf[0]);
 	
@@ -832,7 +1259,7 @@ static ssize_t switch_store(struct kobject *kobj, struct kobj_attribute *attr,
 static ssize_t switch_show(struct kobject *kobj,
 			struct kobj_attribute *attr, char *buf)
 {
-	/*struct cpld_driver *cpld = container_of(kobj, struct cpld_driver, kobj);*/
+	
 
 	pr_info("%s\n", __func__);
 	
@@ -870,7 +1297,7 @@ static ssize_t config_show(struct kobject *kobj, struct kobj_attribute *attr,
 						char *buf)
 {
 	struct cpld_driver *cpld = container_of(kobj, struct cpld_driver, kobj);
-	/*void __iomem *base = cpld->cfg_base + cpld->cfg_offs;*/
+	
 	uint32_t value;
 	ssize_t count = 0;
 	int i;
@@ -894,7 +1321,7 @@ static ssize_t config_show(struct kobject *kobj, struct kobj_attribute *attr,
 					cpld->cfg_start +
 					cpld->cfg_offs + i * 4, value);
 		}
-		/*count += sprintf(buf + count, "\n");*/
+		
 
 		cpld->sysfs_cnt = 0;
 	}
@@ -1120,7 +1547,7 @@ register_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 #endif
 			count += sprintf(buf + count, "%08x\n", value);
 		}
-		/*count += sprintf(buf + count, "\n");*/
+		
 
 		cpld->sysfs_cnt = 0;
 	}
@@ -1188,14 +1615,14 @@ static int __devinit cpld_gpiospi_probe(struct spi_device *spi)
 	cpld->xfer.bits_per_word = 0;
 	dev_set_drvdata(&spi->dev, cpld);
 
-	/*spi_message_init(&cpld->msg);*/
+	
 
 	return 0;
 }
 
 static int __devexit cpld_gpiospi_remove(struct spi_device *spi)
 {
-	/*struct tdo24m *lcd = dev_get_drvdata(&spi->dev);*/
+	
 
 	pr_info("%s\n", __func__);
 
@@ -1213,19 +1640,22 @@ static struct spi_driver cpld_gpiospi_driver = {
 
 static int cpld_gpio_init(struct cpld_driver *cpld)
 {
+#if !((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
 	unsigned int value;
-	//int err;
+#endif
+	
 #if 1
 	pr_info("%s\n", __func__);
-	//if (cpld->pdata->init_cpld_clk){
-	//	cpld->pdata->init_cpld_clk(1);
-	//}
+	
+	
+	
 #else
 	if (cpld->pdata->init_gpio){
 		cpld->pdata->init_gpio();
 	}
 #endif
 
+#if !((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
 	value = readl(cpld->clk_base + 0xb8);
 	pr_info("0131-1: cpld_gpio_init. SDC4_MD: 0x%08x\n", value);
 
@@ -1241,6 +1671,8 @@ static int cpld_gpio_init(struct cpld_driver *cpld)
 	writel(0x02, cpld->cfg_base);
 
 	writel(0x031F3200, cpld->cfg_base + 0x10008);
+#endif
+
 #if 0
 	if(cpld->pdata->cpld_power_pwd){
 		err = gpio_request(cpld->pdata->cpld_power_pwd, "cpld_power");
@@ -1261,14 +1693,59 @@ static int cpld_gpio_init(struct cpld_driver *cpld)
 
 
 	if(cpld->pdata->cpld_power_pwd)
-		gpio_direction_output(cpld->pdata->cpld_power_pwd, 1);	/* Power */
+		gpio_direction_output(cpld->pdata->cpld_power_pwd, 1);	
 	if(cpld->pdata->intf_select)
 		gpio_direction_output(cpld->pdata->intf_select, 1);
 #endif
 
+#if ((defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+	gpio_request(EBI2_ADDR_0, "EBI2_ADDR_0");
+	gpio_direction_output(EBI2_ADDR_0, 0);
+	gpio_free(EBI2_ADDR_0);
+
+	gpio_request(EBI2_ADDR_1, "EBI2_ADDR_1");
+	gpio_direction_output(EBI2_ADDR_1, 0);
+	gpio_free(EBI2_ADDR_1);
+
+	gpio_request(EBI2_ADDR_2, "EBI2_ADDR_2");
+	gpio_direction_output(EBI2_ADDR_2, 0);
+	gpio_free(EBI2_ADDR_2);
+
+	gpio_request(EBI2_DATA_0, "EBI2_DATA_0");
+	gpio_direction_output(EBI2_DATA_0, 0);
+
+	gpio_request(EBI2_DATA_1, "EBI2_DATA_1");
+	gpio_direction_output(EBI2_DATA_1, 0);
+
+	gpio_request(EBI2_DATA_2, "EBI2_DATA_2");
+	gpio_direction_output(EBI2_DATA_2, 0);
+
+	gpio_request(EBI2_DATA_3, "EBI2_DATA_3");
+	gpio_direction_output(EBI2_DATA_3, 0);
+
+	gpio_request(EBI2_DATA_4, "EBI2_DATA_4");
+	gpio_direction_output(EBI2_DATA_4, 0);
+
+	gpio_request(EBI2_DATA_5, "EBI2_DATA_5");
+	gpio_direction_output(EBI2_DATA_5, 0);
+
+	gpio_request(EBI2_DATA_6, "EBI2_DATA_6");
+	gpio_direction_output(EBI2_DATA_6, 0);
+
+	gpio_request(EBI2_DATA_7, "EBI2_DATA_7");
+	gpio_direction_output(EBI2_DATA_7, 0);
+
+	gpio_request(EBI2_OE, "EBI2_OE");
+	gpio_direction_output(EBI2_OE, 1);
+	gpio_free(EBI2_OE);
+
+	gpio_request(EBI2_WE, "EBI2_WE");
+	gpio_direction_output(EBI2_WE, 1);
+	gpio_free(EBI2_WE);
+#else
 	g_cpld_manager.p_cpld_reg = cpld->reg_base;
 	g_cpld_manager.current_tx_buf_num = tx_buffer_1;
-	
+#endif
 	return 0;
 }
 
@@ -1315,12 +1792,23 @@ static int cpld_probe(struct platform_device *pdev)
 {
 	struct cpld_platform_data *pdata = pdev->dev.platform_data;
 	struct cpld_driver *cpld;
-	struct resource *cfg_mem, *reg_mem, *gpio_mem, *clk_mem, *sdc4_mem;
 	int err;
+#ifdef CONFIG_MACH_DUMMY
+	struct resource *sdc4_mem;
+#elif ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY))
+	struct resource *cfg_mem, *reg_mem, *gpio_mem, *clk_mem, *sdc4_mem;
 	int cfg_value;
+#endif
 
 	pr_info("%s\n", __func__);
 
+#ifdef CONFIG_MACH_DUMMY
+	sdc4_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!sdc4_mem) {
+		pr_error("no sdc4 mem resource!\n");
+		return -ENODEV;
+	}
+#elif ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY))
 	cfg_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!cfg_mem) {
 		pr_error("no config mem resource!\n");
@@ -1346,10 +1834,11 @@ static int cpld_probe(struct platform_device *pdev)
 	}
 
 	sdc4_mem = platform_get_resource(pdev, IORESOURCE_MEM, 4);
-	if (!clk_mem) {
+	if (!sdc4_mem) {
 		pr_error("no sdc4 mem resource!\n");
 		return -ENODEV;
 	}
+#endif
 
 	cpld = kzalloc(sizeof(struct cpld_driver), GFP_KERNEL);
 	if (!cpld){
@@ -1360,6 +1849,14 @@ static int cpld_probe(struct platform_device *pdev)
 	g_cpld = cpld;
 	cpld->pdata = pdata;
 
+#ifdef CONFIG_MACH_DUMMY
+	cpld->sdc4_base = ioremap(sdc4_mem->start, resource_size(sdc4_mem));
+	if (!cpld->sdc4_base) {
+		pr_error("no sdc4 mem resource\n");
+		err = -ENOMEM;
+		goto err_sdc4_ioremap;
+	}
+#elif ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY))
 	cpld->cfg_base = ioremap(cfg_mem->start, resource_size(cfg_mem));
 	if (!cpld->cfg_base) {
 		pr_error("no config mem resource\n");
@@ -1399,6 +1896,7 @@ static int cpld_probe(struct platform_device *pdev)
 	pr_info("cfg_value = %08x\n", cfg_value);
 	cfg_value = readl(cpld->cfg_base + 0x0008);
 	pr_info("cfg_value = %08x\n", cfg_value);
+#endif
 
 	err = spi_register_driver(&cpld_gpiospi_driver);
 	if (err)
@@ -1409,12 +1907,15 @@ static int cpld_probe(struct platform_device *pdev)
 	if (err)
 		goto err_2;
 #endif
-	/* Enable SDMC4 CLK */
+
+#if ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+	
 	if (cpld->pdata->init_cpld_clk){
 		pr_info("%s: Enable SDMC4 CLK\n", __func__);
 		cpld->pdata->init_cpld_clk(1);
 	}
-	/* Enable CPLD power */
+#endif
+	
 	if (pdata->power_func){
 		pr_info("%s: Enable CPLD power\n", __func__);
 		pdata->power_func(1);
@@ -1436,7 +1937,9 @@ err_2:
 	spi_unregister_driver(&cpld_spi_driver);
 #endif
 err_1:
+#if ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
 err_sdc4_ioremap:
+#ifndef CONFIG_MACH_DUMMY
 	iounmap(cpld->clk_base);
 err_clk_ioremap:
 	iounmap(cpld->gpio_base);
@@ -1445,6 +1948,8 @@ err_gpio_ioremap:
 err_register_ioremap:
 	iounmap(cpld->cfg_base);
 err_config_ioremap:
+#endif
+#endif
 	kfree(cpld);
 
 	return err;
@@ -1458,11 +1963,15 @@ static int __exit cpld_remove(struct platform_device *pdev)
 
 	spi_unregister_driver(&cpld_gpiospi_driver);
 	cpld_sysfs_remove(cpld);
+#if ((defined CONFIG_MACH_PROTOU) || (defined CONFIG_MACH_DUMMY) || (defined CONFIG_MACH_DUMMY))
+#ifndef CONFIG_MACH_DUMMY
 	iounmap(cpld->clk_base);
 	iounmap(cpld->gpio_base);
 	iounmap(cpld->reg_base);
 	iounmap(cpld->cfg_base);
+#endif
 	iounmap(cpld->sdc4_base);
+#endif
 	kfree(cpld);
 
 	if (pdata->init_cpld_clk){

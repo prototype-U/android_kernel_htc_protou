@@ -46,11 +46,6 @@ Original Auther:
 #include <linux/time.h>
 #include <asm/setup.h>
 
-/*========================================================================================
-
-build flags
-
-========================================================================================*/
 
 #define HTC_ENABLE_POWER_DEBUG  		0
 #define HTC_ENABLE_DUMMY_BATTERY		0
@@ -58,21 +53,11 @@ build flags
 #define XA_board	0
 #define XB_board 	1
 
-/*========================================================================================
-
-battery common parameter defines (independent on battery id yet...)
-
-========================================================================================*/
 
 #define BATTERY_VOLTAGE_MIN 2000
 #define BATTERY_VOLTAGE_MAX 20000
 #define MAKEWORD(a, b)      ((WORD)(((BYTE)(a)) | ((WORD)((BYTE)(b))) << 8))
 
-/*========================================================================================
-
-battery parameter helper functions
-
-========================================================================================*/
 
 static INT32 get_id_index(struct battery_type *battery)
 {
@@ -82,8 +67,6 @@ static INT32 get_id_index(struct battery_type *battery)
 		int i;
 		id_tbl = poweralg_ptr->pdata->batt_param->id_tbl;
 		for (i = 0; id_tbl[2*i] != -1; i++) {
-			/* minus 1, unknown battery is not in ID_RANGE
-			[min, max)*/
 			INT32 resister_min = id_tbl[i*2];
 			INT32 resister_max = id_tbl[i*2 + 1];
 
@@ -92,7 +75,7 @@ static INT32 get_id_index(struct battery_type *battery)
 			}
 		}
 	}
-	return BATTERY_ID_UNKNOWN; /* unknown battery id */
+	return BATTERY_ID_UNKNOWN; 
 }
 
 static INT32 get_temp_index(struct battery_type *battery)
@@ -102,8 +85,6 @@ static INT32 get_temp_index(struct battery_type *battery)
 		battery, struct poweralg_type, battery)->pdata->batt_param;
 	if (batt_param->temp_index_tbl) {
 		for (i = 0; i < 255; i++) {
-			/* the table size shall not be greater then 255, to ensure no infinite looping
-			[min, max)*/
 			INT32 temp = batt_param->temp_index_tbl[i];
 			if (battery->temp_01c >= temp)
 				return i;
@@ -112,14 +93,9 @@ static INT32 get_temp_index(struct battery_type *battery)
 		printk(DRIVER_ZONE " invalid batt_temp (%d) or temp range mapping.\n", battery->temp_01c);
 		return -1;
 	}
-	return 0; /* no temp_tbl case, just use index = 0 */
+	return 0; 
 }
 
-/*========================================================================================
-
-temperature formula definitions
-
-========================================================================================*/
 
 static INT32 get_temp_01c(struct battery_type *battery)
 {
@@ -148,15 +124,10 @@ static INT32 get_temp_01c(struct battery_type *battery)
 	return (TEMP_MIN-1)*10;
 }
 
-/*========================================================================================
-
-over temperature protection
-
-========================================================================================*/
 
 static BOOL is_over_temp(struct battery_type *battery)
 {
-	/* stop charging*/
+	
 	if (battery->temp_01c < over_low_temp_lock_01c || battery->temp_01c >= over_high_temp_lock_01c) {
 		return TRUE;
 	}
@@ -166,7 +137,7 @@ static BOOL is_over_temp(struct battery_type *battery)
 
 static BOOL is_not_over_temp(struct battery_type *battery)
 {
-	/* start charging*/
+	
 	if (battery->temp_01c >= over_low_temp_release_01c &&
 		battery->temp_01c < over_high_temp_release_01c) {
 		return TRUE;
@@ -178,9 +149,6 @@ static BOOL is_not_over_temp(struct battery_type *battery)
 static void __protect_flags_update(struct battery_type *battery,
 	struct protect_flags_type *flags)
 {
-	/* Flags:
-	is_charging_enable_available		- Over temperature, need to stop charging
-	is_charging_high_current_avaialble	- Temperature is too high so that we have to slow charge*/
 
 	if( NULL != flags->func_update_charging_protect_flag)
 	{
@@ -202,14 +170,14 @@ static void __protect_flags_update(struct battery_type *battery,
 	else
 	{
 		if (is_over_temp(battery)) {
-			/* Ex: T<0 or T>45 */
+			
 			flags->is_charging_enable_available = FALSE;
 			flags->is_charging_high_current_avaialble = FALSE;
 #if 0
 			flags->is_battery_overtemp = TRUE;
 #endif
 		} else if (is_not_over_temp(battery)) {
-			/* Ex: T<42 or T>3*/
+			
 			flags->is_charging_enable_available = TRUE;
 			flags->is_charging_high_current_avaialble = TRUE;
 #if 0
@@ -218,8 +186,6 @@ static void __protect_flags_update(struct battery_type *battery,
 		}
 	}
 
-	/* Flags:
-	is_battery_dead			- If battery is dead, show special indicator for it*/
 	if (battery->voltage_mV < BATTERY_DEAD_VOLTAGE_LEVEL) {
 		flags->is_battery_dead = TRUE;
 	}
@@ -228,21 +194,7 @@ static void __protect_flags_update(struct battery_type *battery,
 	}
 }
 
-/*========================================================================================
 
-Voltage-Percentage mapping
-
-========================================================================================*/
-
-/*------------------------------------------------------------------------
- Example:
-	p0 = (4200, 10000); 	4.2V for 100%
-	p1 = (3900, 8000);  	3.9V for 80%
-	p2 = (3700, 2000);  	3.7V for 20%
-	p3 = (3300, 0); 		3.3V for 0%
-
-	if V = 4000, (3900<4000<4200)
-	P = (4000-3900) * (10000-8000)/(4200-3900) + 8000 = 8666*/
 
 #define NUM_SAMPLED_POINTS_MAX 12
 
@@ -292,7 +244,7 @@ static void voltage_curve_translator_add(struct voltage_curve_translator *t, DWO
 
 #if HTC_ENABLE_POWER_DEBUG
 	printk(DRIVER_ZONE " kadc t: capacity=%d voltage=%d\n", capacity, voltage);
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 }
 
 static INT32 voltage_curve_translator_get(struct voltage_curve_translator *t, DWORD voltage)
@@ -313,12 +265,12 @@ static INT32 voltage_curve_translator_get(struct voltage_curve_translator *t, DW
 		p1++;
 	}
 
-	/* DIV ZERO check*/
+	
 	if (p0->voltage - p1->voltage == 0) {
 		return 0;
 	}
 
-	/* INT32 overflow check: mv(4200) * capacity(10000), shall be no problem at all...*/
+	
 	capacity = (voltage - p1->voltage) * (p0->capacity - p1->capacity) / (p0->voltage - p1->voltage) + p1->capacity;
 	if (capacity > t->capacity_max) {
 		capacity = t->capacity_max;
@@ -329,11 +281,6 @@ static INT32 voltage_curve_translator_get(struct voltage_curve_translator *t, DW
 	return capacity;
 }
 
-/*========================================================================================
-
-KADC mapping functions
-
-========================================================================================*/
 
 static struct voltage_curve_translator __get_kadc_t;
 
@@ -357,8 +304,6 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 
 	struct battery_parameter* batt_param = container_of(
 		battery, struct poweralg_type, battery)->pdata->batt_param;
-	/* 1. INT32 overflow check: assert abs(iChgCurrent_ma) <= 3000, iBattTemp_01c>-250, pd_t_coef <= 1000
-		when calculating pd_temp: 0x7FFFFFFF / (500 * 3000 * 1000) =:= 1.4*/
 
 	if (battery->current_mA > 3000)
 		current_mA = 3000;
@@ -367,7 +312,7 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 	if (battery->temp_01c <= -250)
 		temp_01c = -250;
 
-	/* 2. calculate pd_m and pd_temp*/
+	
 
 	if (battery->is_power_on_reset) {
 		if (batt_param->pd_m_coef_tbl_boot)
@@ -391,7 +336,7 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 	}
 
 	if (battery->current_mA < -pd_m_bias_mA) {
-		/* ex: -150mA < -130mA*/
+		
 		pd_m = (abs(battery->current_mA) - pd_m_bias_mA) * pd_m_coef /pd_m_resl;
 	}
 
@@ -404,14 +349,14 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 	}
 	battery->pd_m = pd_m;
 
-	/* 3. calculate KADC using M_PARAMTER_TABLE*/
+	
 
 	if (batt_param->m_param_tbl)
 		m_paramtable = batt_param->m_param_tbl[battery->id_index];
 	else
 		m_paramtable = M_PARAMETER_DEFAULT;
 	if (m_paramtable) {
-		int i = 0; /* assume that m_paramtable has at least 2 items...the last capacity item must be 0 to end the loop...*/
+		int i = 0; 
 
 		voltage_curve_translator_init(&__get_kadc_t);
 
@@ -419,7 +364,7 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 			INT32 capacity = m_paramtable[i];
 			INT32 voltage = m_paramtable[i + 1];
 			if (capacity == 10000) {
-				/* full capacity, no need to fix voltage level*/
+				
 				voltage_curve_translator_add(&__get_kadc_t, voltage, capacity);
 			}
 			else {
@@ -434,7 +379,7 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 
 #if HTC_ENABLE_POWER_DEBUG
 		printk(DRIVER_ZONE " pd_m=%d, pd_temp=%d\n", pd_m, pd_temp);
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 
 		capacity_predict_001p = voltage_curve_translator_get(&__get_kadc_t, battery->voltage_mV + pd_m);
 	}
@@ -449,11 +394,6 @@ static INT32 get_kadc_001p(struct battery_type *battery)
 	return (capacity_predict_001p - capacity_deduction_01p * 10) * 10000 / (10000 - capacity_deduction_01p * 10);
 }
 
-/*========================================================================================
-
-coulomb counter+curve tracer
-
-========================================================================================*/
 
 static INT32 get_software_acr_revise(struct battery_type *battery, UINT32 ms)
 {
@@ -461,26 +401,21 @@ static INT32 get_software_acr_revise(struct battery_type *battery, UINT32 ms)
 	INT32 ccbi_01p = battery->RARC_01p;
 	INT32 delta_01p = kadc_01p - ccbi_01p;
 
-	DWORD C = 5;						/* KADC = 15%~100%*/
+	DWORD C = 5;						
 	if (kadc_01p <= 150) {
 		C = 5;
-	}   	/* KADC = 0%~15%*/
+	}   	
 
 	if (delta_01p < 0) {
-		/* if KADC is less than RARC, p shall be lower*/
+		
 		return -(INT32) (C * ms * delta_01p * delta_01p) / 1000;
 	}
 	else{
-		/* if KADC is larger than RARC, p shall be higher*/
+		
 		return (INT32) (C * ms * delta_01p * delta_01p) / 1000;
 	}
 }
 
-/*========================================================================================
-
-ds2746 gauge ic functions, to access ds2746 registers and convert ADC to battery param
-
-========================================================================================*/
 
 static void __ds2746_clear_porf(void)
 {
@@ -520,7 +455,7 @@ static void __ds2746_init_config(struct battery_type *battery)
 		return;
 	}
 
-	/* Erase SMOD and NBEN value in DS2746 status/config register*/
+	
 	reg_data &= ~(DS2746_STATUS_SMOD | DS2746_STATUS_NBEN);
 	if (!ds2746_i2c_write_u8(reg_data, 0x01)) {
 		printk(DRIVER_ZONE " init config error in write.\n");
@@ -594,7 +529,7 @@ static BOOL __ds2746_battery_adc_udpate(struct battery_type *battery)
 		battery->is_power_on_reset = FALSE;
 	}
 
-	/* adc register value*/
+	
 	battery->voltage_adc = MAKEWORD(reg[7], reg[6]) >> 4;
 	battery->current_adc = MAKEWORD(reg[9], reg[8]);
 	if (battery->current_adc & 0x8000) {
@@ -608,7 +543,7 @@ static BOOL __ds2746_battery_adc_udpate(struct battery_type *battery)
 	battery->id_adc = MAKEWORD(reg[5], reg[4]) >> 4;
 	battery->temp_adc = MAKEWORD(reg[3], reg[2]) >> 4;
 	if (support_ds2746_gauge_ic) {
-		/* we preserve 500mAh for capacity lower than 0%, however the 500mAh is still drained out...we need to do predict for correct ACR*/
+		
 		if ((battery->charge_counter_adc & 0xFFFF) >= 0xF000){
 			printk(DRIVER_ZONE " ACR out of range (x%x)...\n",
 				battery->charge_counter_adc);
@@ -619,15 +554,10 @@ static BOOL __ds2746_battery_adc_udpate(struct battery_type *battery)
 	return TRUE;
 }
 
-/*========================================================================================
-
-softwar acr functions, to accumulate ACR by software and revise by battery parameter
-
-========================================================================================*/
 
 static void __software_charge_counter_update(struct battery_type *battery, UINT32 ms)
 {
-	/* if the charge counter is maintained by sw, batt_alg shall use this routine to update charge counter and related parameters*/
+	
 	INT32 capacity_deduction_01p;
 	INT32 ael_mAh;
 	struct battery_parameter* batt_param = container_of(
@@ -636,20 +566,20 @@ static void __software_charge_counter_update(struct battery_type *battery, UINT3
 		capacity_deduction_01p = batt_param->capacity_deduction_tbl_01p[battery->temp_index];
 	else
 		capacity_deduction_01p = CAPACITY_DEDUCTION_DEFAULT;
-	/* AEL(mAh):	A low temp unusable battery capacity, calculated in runtime*/
+	
 	ael_mAh = capacity_deduction_01p *battery->charge_full_real_mAh /	1000;
 #if HTC_ENABLE_POWER_DEBUG
 	printk(DRIVER_ZONE "chgctr update: I=%d ms=%d.\n", battery->current_mA, ms);
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 
-	/* ACRt(mAh):   The total capacity battery owns, stored in battery->charge_counter_mAh*/
+	
 	battery->software_charge_counter_mAms += (INT32) (battery->current_mA * ms);
 	battery->charge_counter_mAh += (battery->software_charge_counter_mAms /	3600000);
 	battery->software_charge_counter_mAms -= (battery->software_charge_counter_mAms / 3600000) * 3600000;
 
-	/* CCBI(0.1%):  A software RARC*/
+	
 	battery->RARC_01p = (battery->charge_counter_mAh - ael_mAh) * 1000 / (battery->charge_full_real_mAh - ael_mAh);
-	/* store back the battery->charge_counter_mAh to battery->charge_counter_adc*/
+	
 	battery->charge_counter_adc = (battery->charge_counter_mAh + charge_counter_zero_base_mAh) * acr_adc_to_mv_coef / acr_adc_to_mv_resl;
 }
 
@@ -658,13 +588,13 @@ static void __software_charge_counter_revise(struct battery_type *battery, UINT3
 	if (battery->current_mA < 0) {
 #if HTC_ENABLE_POWER_DEBUG
 		printk(DRIVER_ZONE "chgctr revise: delta=%d.\n", get_software_acr_revise(battery, ms));
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 
-		/* revise software charge counter by coulomb counter+curve tracer*/
+		
 		battery->software_charge_counter_mAms += get_software_acr_revise(battery, ms);
 		battery->charge_counter_mAh += (battery->software_charge_counter_mAms /	3600000);
 		battery->software_charge_counter_mAms -= (battery->software_charge_counter_mAms / 3600000) * 3600000;
-		/* store back the battery->charge_counter_mAh to battery->charge_counter_adc*/
+		
 		battery->charge_counter_adc = (battery->charge_counter_mAh + charge_counter_zero_base_mAh) * acr_adc_to_mv_coef / acr_adc_to_mv_resl;
 	}
 }
@@ -685,7 +615,7 @@ static void __software_acr_update(struct battery_type *battery)
 		battery->charge_counter_adc,
 		battery->charge_counter_mAh,
 		battery->software_charge_counter_mAms);
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 
 	__software_charge_counter_update(battery, now_time_ms - last_time_ms);
 	__software_charge_counter_revise(battery, now_time_ms - last_time_ms);
@@ -695,7 +625,7 @@ static void __software_acr_update(struct battery_type *battery)
 		battery->charge_counter_adc,
 		battery->charge_counter_mAh,
 		battery->software_charge_counter_mAms);
-#endif /* HTC_ENABLE_POWER_DEBUG*/
+#endif 
 
 	last_time_ms = now_time_ms;
 }
@@ -714,17 +644,17 @@ static void battery_id_detection(struct battery_type *battery)
 	printk(DRIVER_ZONE "battery.id_ohm=%d, battery.id_index=%d, batt_id_index=%d, st_counter=%d\n",battery->id_ohm, battery->id_index, batt_id_index, batt_id_stable_counter);
 
 	if (is_allow_batt_id_change) {
-		/*! TODO: batt_id changes immediately; may need to modify in future*/
+		
 		if (batt_id_stable_counter >= 3 && batt_id_index != battery->id_index) {
-			/* if batt_id is stable but is different from previous one*/
-			batt_id_stable_counter = 0; /* reset stable counter and set batt_id to new one*/
+			
+			batt_id_stable_counter = 0; 
 		}
 	}
 
 	if (batt_id_stable_counter < 3) {
 		if (batt_id_stable_counter == 0) {
 			UINT32* fl_25;
-			/* first time to get the batt id*/
+			
 			battery->id_index = batt_id_index;
 			if (NULL != (fl_25 = poweralg_ptr->pdata->batt_param->fl_25))
 				battery->charge_full_design_mAh = fl_25[battery->id_index];
@@ -733,7 +663,7 @@ static void battery_id_detection(struct battery_type *battery)
 			battery->charge_full_real_mAh = battery->charge_full_design_mAh;
 			batt_id_stable_counter = 1;
 		} else {
-			/* 2nd and further time to get the batt id*/
+			
 			if (batt_id_index == battery->id_index)
 				batt_id_stable_counter++;
 			else
@@ -742,36 +672,31 @@ static void battery_id_detection(struct battery_type *battery)
 	}
 }
 
-/*========================================================================================
-
-battery param update, the coef are referenced from power spec
-
-========================================================================================*/
 
 static BOOL __battery_param_udpate(struct battery_type *battery)
 {
 	INT32 temp_01c;
 
+#if defined(CONFIG_MACH_DUMMY)
+	return TRUE;
+#endif
+
 	if (support_ds2746_gauge_ic) {
-		/* adc register value are read from __ds2746_battery_adc_udpate()*/
+		
 		if (!__ds2746_battery_adc_udpate(battery))
 			return FALSE;
 	}
 	else{
-		/* adc register value are read from BAHW_get_batt_info_all()
-		if ( !BAHW_get_batt_info_all(battery) ) return FALSE;*/
 	}
 
-	/*real physical value*/
+	
 	battery->voltage_mV = (battery->voltage_adc * voltage_adc_to_mv_coef / voltage_adc_to_mv_resl);
 	battery->current_mA = (battery->current_adc * current_adc_to_mv_coef / current_adc_to_mv_resl);
 	battery->discharge_mA = (battery->discharge_adc * discharge_adc_to_mv_coef / discharge_adc_to_mv_resl);
 	battery->charge_counter_mAh = (battery->charge_counter_adc * acr_adc_to_mv_coef / acr_adc_to_mv_resl) -	charge_counter_zero_base_mAh;
 	battery->current_mA = battery->current_mA - battery->discharge_mA;
-	/* prevent from adc out of range*/
+	
 	if (battery->id_adc >= id_adc_overflow) {
-		/* when id pin grounded with charger connected, id_adc rawdata
-			will overflow to an extreme large value (ffe) */
 		battery->id_adc = 1;
 	}
 	if (battery->id_adc >= id_adc_resl) {
@@ -790,13 +715,13 @@ static BOOL __battery_param_udpate(struct battery_type *battery)
 	if (is_need_battery_id_detection == TRUE) {
 		battery_id_detection(battery);
 	} else {
-#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_PROTODUG) || defined(CONFIG_MACH_MAGNIDS))
+#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
 		battery->id_index = (INT32)get_batt_id();
 #endif
 	}
 
-	/* calculate temperature*/
-	//    battery->temp_01c 			  = get_temp_c((float)temp_R_kohm / ((float)temp_adc_resl/battery->temp_adc - 1))*10;
+	
+	
 	temp_01c = get_temp_01c(battery);
 	if (temp_01c >= TEMP_MIN*10)
 		battery->temp_01c = temp_01c;
@@ -805,9 +730,9 @@ static BOOL __battery_param_udpate(struct battery_type *battery)
 	battery->temp_index = get_temp_index(battery);
 #if (defined(CONFIG_MACH_PRIMODS))
 	if(system_rev == XA_board || system_rev == XB_board)
-		battery->temp_01c = 280;	// XA,XB board use fake temp
+		battery->temp_01c = 280;	
 	#endif
-	/* calculate KADC and RARC*/
+	
 	battery->KADC_01p = CEILING(get_kadc_001p(battery), 10);
 	battery->RARC_01p = CEILING(10000 * battery->charge_counter_mAh / battery->charge_full_real_mAh, 10);
 	if (!support_ds2746_gauge_ic) {
@@ -820,7 +745,7 @@ static BOOL __battery_param_udpate(struct battery_type *battery)
 		return FALSE;
 	}
 
-	/*! star_lee 20100426 - minimum RARC is 0%*/
+	
 	if (battery->RARC_01p <= 0) {
 		battery->RARC_01p = 0;
 	}
@@ -845,32 +770,19 @@ static BOOL __battery_param_udpate(struct battery_type *battery)
 	return TRUE;
 }
 
-/*========================================================================================
-
-time functions
-
-========================================================================================*/
 
 DWORD BAHW_MyGetMSecs(void)
 {
 	struct timespec now;
 	getnstimeofday(&now);
-	/*struct timespec t;
-	t.tv_sec = t.tv_nsec = 0;
-	clock_gettime(CLOCK_MONOTONIC, &t);*/
 	return now.tv_sec * 1000 + now.tv_nsec / 1000000;
 }
 
-/*========================================================================================
-
-battery param public function
-
-========================================================================================*/
 
 void battery_capacity_update(struct battery_type *battery, int capacity_01p)
 {
 
-	/* ACR 500~500+FULL mapping to capacity 0~FULL*/
+	
 	battery->charge_counter_mAh = capacity_01p * battery->charge_full_real_mAh / 1000;
 	battery->charge_counter_adc = (battery->charge_counter_mAh + charge_counter_zero_base_mAh) * acr_adc_to_mv_resl / acr_adc_to_mv_coef;
 	battery->RARC_01p = capacity_01p;
@@ -893,8 +805,6 @@ BOOL battery_param_update(struct battery_type *battery,	struct protect_flags_typ
 	}
 
 	if (flags->is_fake_room_temp) {
-		/* Here we still need to know correct temp value,
-		and also enable charging when over temp in writeconfig 6 4 status */
 #if 0
 		battery->temp_01c = 250;
 		printk(DRIVER_ZONE "fake temp=%d(%x)\n",
@@ -908,17 +818,17 @@ BOOL battery_param_update(struct battery_type *battery,	struct protect_flags_typ
 	if (battery->id_index == BATTERY_ID_UNKNOWN) {
 		flags->is_charging_enable_available = FALSE;
 	}
-#else /* HTC_ENABLE_DUMMY_BATTERY*/
-	/* do not disable charging for debug stage*/
+#else 
+	
 	flags->is_charging_enable_available = TRUE;
-#endif /* HTC_ENABLE_DUMMY_BATTERY*/
+#endif 
 
 	return TRUE;
 }
 
 void battery_param_init(struct battery_type *battery)
 {
-	/* default to 25C unless we can get valid battery temp from adc*/
+	
 	battery->temp_01c = 250;
 	battery->last_temp_01c = battery->temp_01c;
 	battery->temp_check_index = 0;
@@ -926,10 +836,10 @@ void battery_param_init(struct battery_type *battery)
 
 	battery->voltage_mV = 3800;
 
-	/* this is used when accumulate current by software; initial it as 0mAs*/
+	
 	battery->software_charge_counter_mAms = 0;
 
-	/* set POR at first by software; gauge ic will has correct value*/
+	
 	battery->is_power_on_reset = TRUE;
 
 	if (support_ds2746_gauge_ic) {
@@ -955,6 +865,6 @@ void battery_param_init(struct battery_type *battery)
 		break;
 	}
 
-	/*printk(DRIVER_ZONE "battery param inited with board name <%s>\n", HTC_BATT_BOARD_NAME);*/
+	
 }
 

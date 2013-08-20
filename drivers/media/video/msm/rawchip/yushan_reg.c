@@ -18,11 +18,9 @@
 
 #include <linux/kernel.h>
 #include "Yushan_HTC_Functions.h"
-/* #define AFSU_DEBUG */
 
 uint8_t pdpcode_u[] =
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 {
 	0x78,
 	0x64,
@@ -6538,8 +6536,7 @@ uint8_t pdpclib_u[] =
 };
 
 uint8_t dppcode_u[] =
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 {
 	0x78,
 	0xb8,
@@ -53792,8 +53789,7 @@ uint8_t dppclib_u[] =
 };
 
 uint8_t dopcode_u[] =
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 {
 	0x78,
 	0xb8,
@@ -81935,8 +81931,7 @@ uint8_t dopcode_u[] =
 #endif
 
 uint8_t dopclib_u[] =
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 {
 	0x02,
 	0x00,
@@ -84099,8 +84094,7 @@ uint8_t dopclib_u[] =
 #endif
 
 struct yushan_reg_t yushan_regs = {
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 	.pdpcode_first_addr = 0x0234,
 #else
 	.pdpcode_first_addr = 0x0234,
@@ -84115,8 +84109,7 @@ struct yushan_reg_t yushan_regs = {
 	.pdpBootAddr  = 0x1a00,
 	.pdpStartAddr = 0x0234,
 
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 	.dppcode_first_addr = 0x0300,
 #else
 	.dppcode_first_addr = 0x0300,
@@ -84131,8 +84124,7 @@ struct yushan_reg_t yushan_regs = {
 	.dppBootAddr  = 0xd000,
 	.dppStartAddr = 0x0300,
 
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 	.dopcode_first_addr = 0x0300,
 #else
 #ifndef AFSU_DEBUG
@@ -84144,8 +84136,7 @@ struct yushan_reg_t yushan_regs = {
 	.dopcode = &dopcode_u[0],
 	.dopcode_size = ARRAY_SIZE(dopcode_u),
 
-// default to use lib v1.1
-#if 1 //#ifdef CONFIG_USEDXOAF //lib v1.1
+#if 1 
 	.dopclib_first_addr = 0x3bcc,
 #else
 	.dopclib_first_addr = 0x3bcc,

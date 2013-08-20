@@ -21,11 +21,19 @@
 #include <linux/module.h>
 #include <linux/clk.h>
 #include <linux/clkdev.h>
+#include <linux/list.h>
 #include <trace/events/power.h>
+#include <asm/mach-types.h>
+#include <linux/delay.h>
 
 #include "clock.h"
 
-/* Find the voltage level required for a given rate. */
+struct handoff_clk {
+	struct list_head list;
+	struct clk *clk;
+};
+static LIST_HEAD(handoff_list);
+
 static int find_vdd_level(struct clk *clk, unsigned long rate)
 {
 	int level;
@@ -43,7 +51,6 @@ static int find_vdd_level(struct clk *clk, unsigned long rate)
 	return level;
 }
 
-/* Update voltage level given the current votes. */
 static int update_vdd(struct clk_vdd_class *vdd_class)
 {
 	int level, rc;
@@ -62,7 +69,6 @@ static int update_vdd(struct clk_vdd_class *vdd_class)
 	return rc;
 }
 
-/* Vote for a voltage level. */
 int vote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 {
 	unsigned long flags;
@@ -78,7 +84,6 @@ int vote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 	return rc;
 }
 
-/* Remove vote for a voltage level. */
 int unvote_vdd_level(struct clk_vdd_class *vdd_class, int level)
 {
 	unsigned long flags;
@@ -98,7 +103,6 @@ out:
 	return rc;
 }
 
-/* Vote for a voltage level corresponding to a clock's rate. */
 static int vote_rate_vdd(struct clk *clk, unsigned long rate)
 {
 	int level;
@@ -113,7 +117,6 @@ static int vote_rate_vdd(struct clk *clk, unsigned long rate)
 	return vote_vdd_level(clk->vdd_class, level);
 }
 
-/* Remove vote for a voltage level corresponding to a clock's rate. */
 static void unvote_rate_vdd(struct clk *clk, unsigned long rate)
 {
 	int level;
@@ -166,9 +169,6 @@ err_prepare_depends:
 }
 EXPORT_SYMBOL(clk_prepare);
 
-/*
- * Standard clock functions defined in include/linux/clk.h
- */
 int clk_enable(struct clk *clk)
 {
 	int ret = 0;
@@ -198,23 +198,14 @@ int clk_enable(struct clk *clk)
 		ret = vote_rate_vdd(clk, clk->rate);
 		if (ret)
 			goto err_vote_vdd;
+
 		trace_clock_enable(clk->dbg_name, 1, smp_processor_id());
 		if (clk->ops->enable)
 			ret = clk->ops->enable(clk);
 		if (ret)
 			goto err_enable_clock;
-	} else if (clk->flags & CLKFLAG_HANDOFF_RATE) {
-		/*
-		 * The clock was already enabled by handoff code so there is no
-		 * need to enable it again here. Clearing the handoff flag will
-		 * prevent the lateinit handoff code from disabling the clock if
-		 * a client driver still has it enabled.
-		 */
-		clk->flags &= ~CLKFLAG_HANDOFF_RATE;
-		goto out;
 	}
 	clk->count++;
-out:
 	spin_unlock_irqrestore(&clk->lock, flags);
 
 	return 0;
@@ -320,7 +311,7 @@ EXPORT_SYMBOL(clk_get_rate);
 int clk_set_rate(struct clk *clk, unsigned long rate)
 {
 	unsigned long start_rate, flags;
-	int rc;
+	int rc = 0;
 
 	if (IS_ERR_OR_NULL(clk))
 		return -EINVAL;
@@ -329,17 +320,22 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 		return -ENOSYS;
 
 	spin_lock_irqsave(&clk->lock, flags);
+
+	
+	if (clk->rate == rate)
+		goto out;
+
 	trace_clock_set_rate(clk->dbg_name, rate, smp_processor_id());
 	if (clk->count) {
 		start_rate = clk->rate;
-		/* Enforce vdd requirements for target frequency. */
+		
 		rc = vote_rate_vdd(clk, rate);
 		if (rc)
 			goto err_vote_vdd;
 		rc = clk->ops->set_rate(clk, rate);
 		if (rc)
 			goto err_set_rate;
-		/* Release vdd requirements for starting frequency. */
+		
 		unvote_rate_vdd(clk, start_rate);
 	} else {
 		rc = clk->ops->set_rate(clk, rate);
@@ -347,7 +343,7 @@ int clk_set_rate(struct clk *clk, unsigned long rate)
 
 	if (!rc)
 		clk->rate = rate;
-
+out:
 	spin_unlock_irqrestore(&clk->lock, flags);
 	return rc;
 
@@ -417,6 +413,48 @@ EXPORT_SYMBOL(clk_set_flags);
 
 static struct clock_init_data __initdata *clk_init_data;
 
+static enum handoff __init __handoff_clk(struct clk *clk)
+{
+	enum handoff ret;
+	struct handoff_clk *h;
+	unsigned long rate;
+	int err = 0;
+
+	if (clk == NULL || clk->count)
+		return HANDOFF_ENABLED_CLK;
+
+	
+	if (!clk->ops->handoff || (clk->flags & CLKFLAG_SKIP_HANDOFF))
+		return HANDOFF_DISABLED_CLK;
+
+	ret = clk->ops->handoff(clk);
+	if (ret == HANDOFF_ENABLED_CLK) {
+		ret = __handoff_clk(clk_get_parent(clk));
+		if (ret == HANDOFF_ENABLED_CLK) {
+			h = kmalloc(sizeof(*h), GFP_KERNEL);
+			if (!h) {
+				err = -ENOMEM;
+				goto out;
+			}
+			err = clk_prepare_enable(clk);
+			if (err)
+				goto out;
+			rate = clk_get_rate(clk);
+			if (rate)
+				pr_debug("%s rate=%lu\n", clk->dbg_name, rate);
+			h->clk = clk;
+			list_add_tail(&h->list, &handoff_list);
+		}
+	}
+out:
+	if (err) {
+		pr_err("%s handoff failed (%d)\n", clk->dbg_name, err);
+		kfree(h);
+		ret = HANDOFF_DISABLED_CLK;
+	}
+	return ret;
+}
+
 void __init msm_clock_init(struct clock_init_data *data)
 {
 	unsigned n;
@@ -430,7 +468,10 @@ void __init msm_clock_init(struct clock_init_data *data)
 
 	clock_tbl = data->table;
 	num_clocks = data->size;
-
+#ifdef CONFIG_HTC_MSM7K_WAIT_AMSS_READY
+	pr_info("%s: wait for AMSS Ready ...\n", __func__);
+	mdelay(5000);
+#endif
 	for (n = 0; n < num_clocks; n++) {
 		struct clk *parent;
 		clk = clock_tbl[n].clk;
@@ -439,62 +480,32 @@ void __init msm_clock_init(struct clock_init_data *data)
 			list_add(&clk->siblings, &parent->children);
 	}
 
-	/*
-	 * Detect and preserve initial clock state until clock_late_init() or
-	 * a driver explicitly changes it, whichever is first.
-	 */
-	for (n = 0; n < num_clocks; n++) {
-		clk = clock_tbl[n].clk;
-		if (clk->ops->handoff && !(clk->flags & CLKFLAG_HANDOFF_RATE) &&
-		    (clk->ops->handoff(clk) == HANDOFF_ENABLED_CLK)) {
-			clk->flags |= CLKFLAG_HANDOFF_RATE;
-			clk_prepare_enable(clk);
-		}
-	}
+	for (n = 0; n < num_clocks; n++)
+		__handoff_clk(clock_tbl[n].clk);
 
 	clkdev_add_table(clock_tbl, num_clocks);
 
 	if (clk_init_data->post_init)
 		clk_init_data->post_init();
+	pr_info("%s done!\n", __func__);
 }
 
-/*
- * The bootloader and/or AMSS may have left various clocks enabled.
- * Disable any clocks that have not been explicitly enabled by a
- * clk_enable() call and don't have the CLKFLAG_SKIP_AUTO_OFF flag.
- */
 static int __init clock_late_init(void)
 {
-	unsigned n, count = 0;
-	unsigned long flags;
-	int ret = 0;
+	struct handoff_clk *h, *h_temp;
+	int n, ret = 0;
 
 	clock_debug_init(clk_init_data);
-	for (n = 0; n < clk_init_data->size; n++) {
-		struct clk *clk = clk_init_data->table[n].clk;
-		bool handoff = false;
+	for (n = 0; n < clk_init_data->size; n++)
+		clock_debug_add(clk_init_data->table[n].clk);
 
-		clock_debug_add(clk);
-		spin_lock_irqsave(&clk->lock, flags);
-		if (!(clk->flags & CLKFLAG_SKIP_AUTO_OFF)) {
-			if (!clk->count && clk->ops->auto_off) {
-				count++;
-				clk->ops->auto_off(clk);
-			}
-		}
-		if (clk->flags & CLKFLAG_HANDOFF_RATE) {
-			clk->flags &= ~CLKFLAG_HANDOFF_RATE;
-			handoff = true;
-		}
-		spin_unlock_irqrestore(&clk->lock, flags);
-		/*
-		 * Calling this outside the lock is safe since
-		 * it doesn't need to be atomic with the flag change.
-		 */
-		if (handoff)
-			clk_disable_unprepare(clk);
+	pr_info("%s: Removing enables held for handed-off clocks\n", __func__);
+	list_for_each_entry_safe(h, h_temp, &handoff_list, list) {
+		clk_disable_unprepare(h->clk);
+		list_del(&h->list);
+		kfree(h);
 	}
-	pr_info("clock_late_init() disabled %d unused clocks\n", count);
+
 	if (clk_init_data->late_init)
 		ret = clk_init_data->late_init();
 	return ret;

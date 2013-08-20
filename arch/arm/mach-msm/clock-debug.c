@@ -29,8 +29,6 @@ static int clock_debug_rate_set(void *data, u64 val)
 	struct clk *clock = data;
 	int ret;
 
-	/* Only increases to max rate will succeed, but that's actually good
-	 * for debugging purposes so we don't check for error. */
 	if (clock->flags & CLKFLAG_MAX)
 		clk_set_max_rate(clock, val);
 	ret = clk_set_rate(clock, val);
@@ -57,7 +55,7 @@ static int clock_debug_measure_get(void *data, u64 *val)
 	struct clk *clock = data;
 	int ret, is_hw_gated;
 
-	/* Check to see if the clock is in hardware gating mode */
+	
 	if (clock->flags & CLKFLAG_HWCG)
 		is_hw_gated = clock->ops->in_hwcg_mode(clock);
 	else
@@ -65,17 +63,10 @@ static int clock_debug_measure_get(void *data, u64 *val)
 
 	ret = clk_set_parent(measure, clock);
 	if (!ret) {
-		/*
-		 * Disable hw gating to get accurate rate measurements. Only do
-		 * this if the clock is explictly enabled by software. This
-		 * allows us to detect errors where clocks are on even though
-		 * software is not requesting them to be on due to broken
-		 * hardware gating signals.
-		 */
 		if (is_hw_gated && clock->count)
 			clock->ops->disable_hwcg(clock);
 		*val = clk_get_rate(measure);
-		/* Reenable hwgating if it was disabled */
+		
 		if (is_hw_gated && clock->count)
 			clock->ops->enable_hwcg(clock);
 	}
@@ -169,16 +160,23 @@ int __init clock_debug_init(struct clock_init_data *data)
 
 static int clock_debug_print_clock(struct clk *c)
 {
-	size_t ln = 0;
-	char s[128];
+	char *start = "";
 
 	if (!c || !c->count)
 		return 0;
 
-	ln += snprintf(s, sizeof(s), "\t%s", c->dbg_name);
-	while (ln < sizeof(s) && (c = clk_get_parent(c)))
-		ln += snprintf(s + ln, sizeof(s) - ln, " -> %s", c->dbg_name);
-	pr_info("%s\n", s);
+	pr_info("\t");
+	do {
+		if (c->vdd_class)
+			pr_cont("%s%s [%ld, %lu]", start, c->dbg_name, c->rate,
+				c->vdd_class->cur_level);
+		else
+			pr_cont("%s%s [%ld]", start, c->dbg_name, c->rate);
+		start = " -> ";
+	} while ((c = clk_get_parent(c)));
+
+	pr_cont("\n");
+
 	return 1;
 }
 
@@ -187,10 +185,6 @@ void clock_debug_print_enabled(void)
 	unsigned i;
 	int cnt = 0;
 
-/*
-	if (likely(!debug_suspend))
-		return;
-*/
 
 	pr_info("Enabled clocks:\n");
 	for (i = 0; i < num_msm_clocks; i++)
@@ -208,7 +202,7 @@ static int list_rates_show(struct seq_file *m, void *unused)
 	struct clk *clock = m->private;
 	int rate, level, fmax = 0, i = 0;
 
-	/* Find max frequency supported within voltage constraints. */
+	
 	if (!clock->vdd_class) {
 		fmax = INT_MAX;
 	} else {
@@ -217,10 +211,6 @@ static int list_rates_show(struct seq_file *m, void *unused)
 				fmax = clock->fmax[level];
 	}
 
-	/*
-	 * List supported frequencies <= fmax. Higher frequencies may appear in
-	 * the frequency table, but are not valid and should not be listed.
-	 */
 	while ((rate = clock->ops->list_rate(clock, i++)) >= 0) {
 		if (rate <= fmax)
 			seq_printf(m, "%u\n", rate);

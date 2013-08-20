@@ -13,7 +13,8 @@
 #include <linux/delay.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <linux/pm_qos_params.h>
+#include <linux/pm_qos.h>
+#include <linux/module.h>
 #include <mach/board.h>
 #include <mach/camera.h>
 #include <mach/camera.h>
@@ -33,6 +34,19 @@ static struct msm_camera_io_clk camio_clk = {
 };
 static int apps_reset;
 void __iomem *appbase;
+
+void msm_io_w(u32 data, void __iomem *addr)
+{
+	CDBG("%s: %08x %08x\n", __func__, (int) (addr), (data));
+	writel_relaxed((data), (addr));
+}
+
+u32 msm_io_r(void __iomem *addr)
+{
+	uint32_t data = readl_relaxed(addr);
+	CDBG("%s: %08x %08x\n", __func__, (int) (addr), (data));
+	return data;
+}
 
 void msm_camio_clk_rate_set_2(struct clk *clk, int rate)
 {
@@ -54,9 +68,9 @@ int msm_camio_clk_enable(enum msm_camio_clk_type clktype)
 	}
 
 	if (!IS_ERR(clk)) {
-		//HTC_START
+		
 		clk_prepare(clk);
-		//HTC_END
+		
 		clk_enable(clk);
 	} else
 		rc = -1;
@@ -78,9 +92,9 @@ int msm_camio_clk_disable(enum msm_camio_clk_type clktype)
 
 	if (!IS_ERR(clk)) {
 		clk_disable(clk);
-		//HTC_START
+		
 		clk_unprepare(clk);
-		//HTC_END
+		
 		clk_put(clk);
 	} else
 		rc = -1;
@@ -97,7 +111,7 @@ void msm_camio_vfe_blk_reset_2(void)
 {
 	uint32_t val;
 
-	/* do apps reset */
+	
 	val = readl_relaxed(appbase + 0x00000210);
 	val |= 0x1;
 	writel_relaxed(val, appbase + 0x00000210);
@@ -108,7 +122,7 @@ void msm_camio_vfe_blk_reset_2(void)
 	writel_relaxed(val, appbase + 0x00000210);
 	usleep_range(10000, 11000);
 
-	/* do axi reset */
+	
 	val = readl_relaxed(appbase + 0x00000208);
 	val |= 0x1;
 	writel_relaxed(val, appbase + 0x00000208);
@@ -128,7 +142,7 @@ void msm_camio_vfe_blk_reset_3(void)
 	if (!apps_reset)
 		return;
 
-	/* do apps reset */
+	
 	val = readl_relaxed(appbase + 0x00000210);
 	val |= 0x10A0000;
 	writel_relaxed(val, appbase + 0x00000210);
