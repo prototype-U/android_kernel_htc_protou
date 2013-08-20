@@ -41,16 +41,6 @@ struct keyreset_state {
 int restart_requested;
 static void deferred_restart(struct work_struct *dummy)
 {
-	pr_info("keyreset::%s in\n", __func__);
-#ifdef CONFIG_MSM_WATCHDOG
-		msm_watchdog_suspend(NULL);
-#endif
-		/* show blocked processes to debug hang problems */
-		printk(KERN_INFO "\n### Show Blocked State ###\n");
-		show_state_filter(TASK_UNINTERRUPTIBLE);
-#ifdef CONFIG_MSM_WATCHDOG
-		msm_watchdog_resume(NULL);
-#endif
 	restart_requested = 2;
 	sys_sync();
 	restart_requested = 3;
@@ -97,7 +87,6 @@ static void keyreset_event(struct input_handle *handle, unsigned int type,
 
 	if (value && !state->restart_disabled &&
 	    state->key_down == state->key_down_target) {
-
 		state->restart_disabled = 1;
 		if (restart_requested)
 			panic("keyboard reset failed, %d", restart_requested);
@@ -186,12 +175,12 @@ static int keyreset_probe(struct platform_device *pdev)
 	int key, *keyp;
 	struct keyreset_state *state;
 	struct keyreset_platform_data *pdata = pdev->dev.platform_data;
-
+#if 0
 	if (!board_build_flag()) {
 		printk(KERN_INFO "[KEY] Ship code, disable key reset.\n");
-		return -EINVAL;
+		return 0;
 	}
-
+#endif
 	if (!pdata)
 		return -EINVAL;
 

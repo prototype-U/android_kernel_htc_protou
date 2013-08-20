@@ -33,7 +33,6 @@
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
 #include <linux/hrtimer.h>
-#include <linux/wakelock.h>
 
 #include <linux/fb.h>
 #include <linux/list.h>
@@ -43,9 +42,6 @@
 #ifdef CONFIG_HAS_EARLYSUSPEND
 #include <linux/earlysuspend.h>
 #endif
-
-/*  Idle wakelock to prevent PC between wake up and Vsync */
-extern struct wake_lock mdp_idle_wakelock;
 
 #include "msm_fb_panel.h"
 #include "mdp.h"
@@ -64,6 +60,7 @@ struct msmfb_writeback_data_list {
 	struct list_head registered_entry;
 	struct list_head active_entry;
 	void *addr;
+	struct ion_handle *ihdl;
 	struct file *pmem_file;
 	struct msmfb_data buf_info;
 	struct msmfb_img img;
@@ -79,11 +76,12 @@ struct msm_fb_data_type {
 
 	panel_id_type panel;
 	struct msm_panel_info panel_info;
-	int init_mipi_lcd;
+	int first_init_lcd;
 
 	DISP_TARGET dest;
 	struct fb_info *fbi;
 
+	struct device *dev;
 	boolean op_enable;
 	uint32 fb_imgType;
 	boolean sw_currently_refreshing;
@@ -101,7 +99,7 @@ struct msm_fb_data_type {
 	boolean pan_waiting;
 	struct completion pan_comp;
 
-	/* vsync */
+	
 	boolean use_mdp_vsync;
 	__u32 vsync_gpio;
 	__u32 total_lcd_lines;
@@ -130,7 +128,6 @@ struct msm_fb_data_type {
 	__u32 channel_irq;
 
 	struct mdp_dma_data *dma;
-	struct device_attribute dev_attr;
 	void (*dma_fnc) (struct msm_fb_data_type *mfd);
 	int (*cursor_update) (struct fb_info *info,
 			      struct fb_cursor *cursor);
@@ -141,8 +138,6 @@ struct msm_fb_data_type {
 	int (*start_histogram) (struct mdp_histogram_start_req *req);
 	int (*stop_histogram) (struct fb_info *info, uint32_t block);
 	void (*vsync_ctrl) (int enable);
-  	void (*vsync_init) (int cndx);
-  	void *vsync_show;
 	void *cursor_buf;
 	void *cursor_buf_phys;
 
@@ -157,10 +152,11 @@ struct msm_fb_data_type {
 	__u32 var_xres;
 	__u32 var_yres;
 	__u32 var_pixclock;
-#if 1 /* HTC_CSP_START */
+	__u32 var_frame_rate;
+#if 1 
 	uint32_t width;
 	uint32_t height;
-#endif /* HTC_CSP_END */
+#endif 
 
 #ifdef MSM_FB_ENABLE_DBGFS
 	struct dentry *sub_dir;
@@ -183,7 +179,6 @@ struct msm_fb_data_type {
 	struct timer_list msmfb_no_update_notify_timer;
 	struct completion msmfb_update_notify;
 	struct completion msmfb_no_update_notify;
-	int vsync_sysfs_created;
 	struct mutex writeback_mutex;
 	struct mutex unregister_mutex;
 	struct list_head writeback_busy_queue;
@@ -198,8 +193,6 @@ struct msm_fb_data_type {
 	u32 ov_start;
 	u32 mem_hid;
 	u32 mdp_rev;
-	u32 use_ov0_blt, ov0_blt_state;
-	u32 use_ov1_blt, ov1_blt_state;
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
@@ -229,6 +222,8 @@ void msm_fb_config_backlight(struct msm_fb_data_type *mfd);
 
 void fill_black_screen(void);
 void unfill_black_screen(void);
+int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
+				struct fb_info *info);
 extern void htc_mdp_sem_down(struct task_struct *current_task, struct semaphore *mutex);
 extern void htc_mdp_sem_up(struct semaphore *mutex);
 
@@ -236,4 +231,6 @@ extern void htc_mdp_sem_up(struct semaphore *mutex);
 #define INIT_IMAGE_FILE "/initlogo.rle"
 int load_565rle_image(char *filename, bool bf_supported);
 #endif
-#endif /* MSM_FB_H */
+
+#define DEFAULT_BRIGHTNESS 143
+#endif 

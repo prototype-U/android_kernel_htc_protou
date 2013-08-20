@@ -17,16 +17,25 @@
 #include <asm/setup.h>
 #include <linux/mtd/nand.h>
 
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/miscdevice.h>
+#include <asm/uaccess.h>
+#include <asm/atomic.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
+#include <mach/debug_mm.h>
+#include <linux/slab.h>
+#include <linux/debugfs.h>
+
+#include <asm/htc_version.h>
+
 
 #define MFG_GPIO_TABLE_MAX_SIZE        0x400
 static unsigned char mfg_gpio_table[MFG_GPIO_TABLE_MAX_SIZE];
 
 #if 0
 #define ATAG_SMI 0x4d534D71
-/* setup calls mach->fixup, then parse_tags, parse_cmdline
- * We need to setup meminfo in mach->fixup, so this function
- * will need to traverse each tag to find smi tag.
- */
 int __init parse_tag_smi(const struct tag *tags)
 {
 	int smi_sz = 0, find = 0;
@@ -69,6 +78,21 @@ int __init parse_tag_hwid(const struct tag *tags)
 	return hwid;
 }
 __tagtable(ATAG_HWID, parse_tag_hwid);
+#endif
+
+static unsigned g_htc_skuid;
+unsigned htc_get_skuid(void)
+{
+        return g_htc_skuid;
+}
+EXPORT_SYMBOL(htc_get_skuid);
+
+static unsigned g_htc_pcbid;
+unsigned htc_get_pcbid(void)
+{
+        return g_htc_pcbid;
+}
+EXPORT_SYMBOL(htc_get_pcbid);
 
 #define ATAG_SKUID 0x4d534D73
 int __init parse_tag_skuid(const struct tag *tags)
@@ -84,14 +108,67 @@ int __init parse_tag_skuid(const struct tag *tags)
 		}
 	}
 
-	if (find)
+	if (find){
 		skuid = t->u.revision.rev;
-	printk(KERN_DEBUG "[K] parse_tag_skuid: hwid = 0x%x\n", skuid);
+		g_htc_skuid = skuid;
+	}
+	printk(KERN_INFO "[K] parse_tag_skuid: hwid = 0x%x\n", skuid);
 	return skuid;
 }
 __tagtable(ATAG_SKUID, parse_tag_skuid);
 
-/* Proximity sensor calibration values */
+#define ATAG_HTC_PCBID 0x54410008
+int __init parse_tag_pcbid(const struct tag *tags)
+{
+        int pcbid= 0, find = 0;
+        struct tag *t = (struct tag *)tags;
+
+        for (; t->hdr.size; t = tag_next(t)) {
+                if (t->hdr.tag == ATAG_HTC_PCBID) {
+                        printk(KERN_DEBUG "find the pcbid tag\n");
+                        find = 1;
+                        break;
+                }
+        }
+
+        if (find) {
+		pcbid = t->u.revision.rev;
+		g_htc_pcbid = (pcbid & (0xFF000000)) >> 24;
+        }
+        printk(KERN_INFO "[K] parse_tag_pcbid: pcbid = 0x%x\n", pcbid);
+        return pcbid;
+}
+__tagtable(ATAG_HTC_PCBID, parse_tag_pcbid);
+
+int htc_get_board_revision(void)
+{
+    unsigned int htc_skuid = 0, htc_pcbid = 0;
+
+    
+    htc_skuid = htc_get_skuid();
+    htc_pcbid = htc_get_pcbid();
+
+    
+    if (htc_skuid == 0) {
+        return BOARD_EVM;       
+    }
+    else {
+        if ((htc_pcbid >= HTC_PCBID_EVT_MIN) && (htc_pcbid <= HTC_PCBID_EVT_MAX)) {
+            return (htc_pcbid + 1);
+        }
+        else if ((htc_pcbid >= HTC_PCBID_PVT_MIN) && (htc_pcbid <= HTC_PCBID_PVT_MAX)) {
+            return htc_pcbid;
+        }
+        else {
+            printk(KERN_ERR "%s(%d): Unknown board revision!! skuid=[0x%08X], pcbid=[0x%02X].\n", __func__, __LINE__, htc_skuid, htc_pcbid);
+            return BOARD_UNKNOWN;   
+        }
+    }
+}
+
+EXPORT_SYMBOL(htc_get_board_revision);
+
+#if 0
 unsigned int als_kadc;
 EXPORT_SYMBOL(als_kadc);
 static int __init parse_tag_als_calibration(const struct tag *tag)
@@ -173,7 +250,6 @@ int __init parse_tag_engineerid(const struct tag *tags)
 __tagtable(ATAG_ENGINEERID, parse_tag_engineerid);
 
 
-/* G-Sensor calibration value */
 #define ATAG_GS         0x5441001d
 
 unsigned int gs_kvalue;
@@ -188,7 +264,6 @@ static int __init parse_tag_gs_calibration(const struct tag *tag)
 
 __tagtable(ATAG_GS, parse_tag_gs_calibration);
 
-/* Proximity sensor calibration values */
 #define ATAG_PS         0x5441001c
 
 unsigned int ps_kparam1;
@@ -210,7 +285,6 @@ static int __init parse_tag_ps_calibration(const struct tag *tag)
 
 __tagtable(ATAG_PS, parse_tag_ps_calibration);
 
-/* camera values */
 #define ATAG_CAM	0x54410021
 
 int __init parse_tag_cam(const struct tag *tags)
@@ -234,7 +308,6 @@ return mem_size;
 }
 __tagtable(ATAG_CAM, parse_tag_cam);
 
-/* Gyro/G-senosr calibration values */
 #define ATAG_GRYO_GSENSOR	0x54410020
 unsigned char gyro_gsensor_kvalue[37];
 EXPORT_SYMBOL(gyro_gsensor_kvalue);
@@ -278,7 +351,20 @@ int unregister_notifier_by_touchkey(struct notifier_block *nb)
 #endif
 #endif
 
-/* radio security values */
+#define ATAG_GS         0x5441001d
+
+unsigned int gs_kvalue;
+EXPORT_SYMBOL(gs_kvalue);
+
+static int __init parse_tag_gs_calibration(const struct tag *tag)
+{
+	gs_kvalue = tag->u.revision.rev;
+	printk(KERN_DEBUG "[K] %s: gs_kvalue = 0x%x\n", __func__, gs_kvalue);
+	return 0;
+}
+
+__tagtable(ATAG_GS, parse_tag_gs_calibration);
+
 #define ATAG_SECURITY	0x54410022
 
 int __init parse_tag_security(const struct tag *tags)
@@ -353,6 +439,18 @@ int __init board_mfg_mode_init(char *s)
 		mfg_mode = 7;
 	else if (!strcmp(s, "mfgkernel"))
 		mfg_mode = 8;
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
+	else if (!strcmp(s, "radiorouter_sprd"))
+		mfg_mode = 9;
+	else if (!strcmp(s, "krouter1_sprd"))
+		mfg_mode = 10;
+	else if (!strcmp(s, "cftrouter_sprd"))
+		mfg_mode = 11;
+	else if (!strcmp(s, "krouter1adc_sprd"))
+		mfg_mode = 12;
+	else if (!strcmp(s, "krouter2_sprd"))
+		mfg_mode = 13;
+#endif
 	return 1;
 }
 __setup("androidboot.mode=", board_mfg_mode_init);
@@ -378,12 +476,9 @@ static int __init board_bootloader_setup(char *str)
 
 	strcpy(temp, str);
 
-	/*parse the last parameter*/
+	
 	while ((p = strsep(&args, ".")) != NULL) build = p;
 
-	/* Sometime hboot version would change from .X000 to .X001, .X002,...
-	 * So compare the first character to avoid unnecessary error.
-	 */
 	if (build) {
 		if (build[0] == '0') {
 			printk(KERN_INFO "[K] %s: SHIP BUILD\n", __func__);
@@ -412,7 +507,6 @@ EXPORT_SYMBOL(board_build_flag);
 
 #if 0
 
-/* ISL29028 ID values */
 #define ATAG_PS_TYPE 0x4d534D77
 int ps_type;
 EXPORT_SYMBOL(ps_type);
@@ -440,6 +534,21 @@ unsigned int get_radio_flag(void)
 {
 	return radio_flag;
 }
+
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
+static unsigned int radio2_flag;
+int __init radio2_flag_init(char *s)
+{
+	radio2_flag = simple_strtoul(s, 0, 16);
+	return 1;
+}
+__setup("radio2flag=", radio2_flag_init);
+
+unsigned int get_radio2_flag(void)
+{
+	return radio2_flag;
+}
+#endif
 
 static unsigned long kernel_flag;
 int __init kernel_flag_init(char *s)
@@ -509,3 +618,18 @@ int board_get_usb_ats(void)
 }
 
 EXPORT_SYMBOL(board_get_usb_ats);
+
+static unsigned int tamper_sf;
+int __init check_tamper_sf(char *s)
+{
+       tamper_sf = simple_strtoul(s, 0, 10);
+       return 1;
+}
+__setup("td.sf=", check_tamper_sf);
+
+unsigned int get_tamper_sf(void)
+{
+       return tamper_sf;
+}
+EXPORT_SYMBOL(get_tamper_sf);
+

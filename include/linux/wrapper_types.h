@@ -4,7 +4,6 @@
 #define DRIVER_ZONE     "[BATT]"
 #define DRIVER_BATTERY  (1<<9)
 
-/* The left side of these typedefs are machine and compiler dependent */
 typedef signed      char INT8;
 typedef unsigned    char UINT8;
 typedef signed      short INT16;
@@ -40,7 +39,6 @@ typedef INT128 * PINT128;
 typedef UINT128 * PUINT128;
 typedef const void *PCVOID;
 typedef void **PPVOID;
-/*typedef unsigned char uchar;*/
 typedef void (*PFNVOID)( void);
 typedef char CHAR;
 typedef UINT8 BYTE;
@@ -86,6 +84,6 @@ typedef UINT32 PHKEY;
 
 #define LOBYTE(w)           ((BYTE)(w))
 #define HIBYTE(w)           ((BYTE)(((WORD)(w) >> 8) & 0xFF))
-#define CEILING(n, precision)   ((n+precision-1)/precision)  /* ex: CEILING(989, 10)=99, means 98.9 mapping to 99*/
+#define CEILING(n, precision)   ((n+precision-1)/precision)  
 
 #endif

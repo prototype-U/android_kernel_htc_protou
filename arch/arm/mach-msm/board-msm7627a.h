@@ -18,17 +18,11 @@ void __init msm7627a_init_mmc(void);
 
 void __init msm_msm7627a_allocate_memory_regions(void);
 void __init msm_fb_add_devices(void);
-#if defined(CONFIG_MACH_PROTODCG)
-#define MSM_RAM_CONSOLE_BASE    0x12F00000 /* MSM_HTC_RAM_CONSOLE_PHYS must be the same */
-#else
-#define MSM_RAM_CONSOLE_BASE    0x03100000 /* MSM_HTC_RAM_CONSOLE_PHYS must be the same */
-#endif
-#define MSM_RAM_CONSOLE_SIZE    MSM_HTC_RAM_CONSOLE_SIZE
 
 enum {
 	GPIO_EXPANDER_IRQ_BASE  = NR_MSM_IRQS + NR_GPIO_IRQS,
 	GPIO_EXPANDER_GPIO_BASE = NR_MSM_GPIOS,
-	/* SURF expander */
+	
 	GPIO_CORE_EXPANDER_BASE = GPIO_EXPANDER_GPIO_BASE,
 	GPIO_BT_SYS_REST_EN     = GPIO_CORE_EXPANDER_BASE,
 	GPIO_WLAN_EXT_POR_N,
@@ -46,7 +40,7 @@ enum {
 	GPIO_CORE_EXPANDER_IO13,
 	GPIO_CORE_EXPANDER_IO14,
 	GPIO_CORE_EXPANDER_IO15,
-	/* Camera expander */
+	
 	GPIO_CAM_EXPANDER_BASE  = GPIO_CORE_EXPANDER_BASE + 16,
 	GPIO_CAM_GP_STROBE_READY	= GPIO_CAM_EXPANDER_BASE,
 	GPIO_CAM_GP_AFBUSY,
@@ -64,7 +58,7 @@ enum {
 	QRD_GPIO_WAKE_ON_WIRELESS,
 	QRD_GPIO_BACKLIGHT_EN,
 	QRD_GPIO_NC,
-	QRD_GPIO_CAM_3MP_PWDN,      /* CAM_VGA */
+	QRD_GPIO_CAM_3MP_PWDN,      
 	QRD_GPIO_WLAN_EN,
 	QRD_GPIO_CAM_5MP_SHDN_EN,
 	QRD_GPIO_CAM_5MP_RESET,
@@ -79,7 +73,11 @@ enum {
 #define BAHAMA_SLAVE_ID_FM_REG 0x02
 #define BAHAMA_SLAVE_ID_FM_ADDR  0x2A
 #define BAHAMA_SLAVE_ID_QMEMBIST_ADDR   0x7B
+#if defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY)
+#define FM_GPIO 42
+#else
 #define FM_GPIO 83
+#endif
 #define BT_PCM_BCLK_MODE  0x88
 #define BT_PCM_DIN_MODE   0x89
 #define BT_PCM_DOUT_MODE  0x8A
@@ -89,40 +87,6 @@ enum {
 #define FM_I2S_SCK_MODE   0x90
 #define I2C_PIN_CTL       0x15
 #define I2C_NORMAL	  0x40
-
-/* Compass  */
-#define PROTOU_GPIO_GSENSORS_INT         (76)
-#define PROTOU_LAYOUTS			{ \
-		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0, -1} }, \
-		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0,  1} }, \
-		{ { -1,  0, 0}, {  0,  1, 0}, {0, 0, -1} }, \
-		{ {  1,  0, 0}, {  0,  0, 1}, {0, 1,  0} }  \
-					}
-/* NFC */
-#define PROTOU_GPIO_NFC_IRQ (94)
-#define PROTOU_GPIO_NFC_VEN (23)
-#define PROTOU_GPIO_NFC_DL_MODE (96)
-
-/* Camera */
-#define PROTOU_GPIO_CAM_I2C_SDA    (60)
-#define PROTOU_GPIO_CAM_I2C_SCL    (61)
-#define PROTOU_GPIO_CAM_RST        (128)
-#define PROTOU_GPIO_CAM_PWDN       (129)
-#define PROTOU_GPIO_CAM_MCLK       (15)
-#define	PROTOU_GPIO_CAMIO_1V8_EN   (12)
-#define	PROTOU_GPIO_CAM_1V8_EN     (81)
-#define	PROTOU_GPIO_CAM_ID         (4)
-/* Rawchip */
-#define	PROTOU_GPIO_RAW_RST        (111)
-#define	PROTOU_GPIO_RAW_INTR0      (85)
-#define	PROTOU_GPIO_RAW_INTR1      (49)
-#define	PROTOU_GPIO_RAW_1V2_EN     (9)
-#define	PROTOU_GPIO_RAW_1V8_EN     PROTOU_GPIO_CAM_1V8_EN
-/* CPLD */
-#define	PROTOU_GPIO_CPLD_1V8_EN    PROTOU_GPIO_CAM_1V8_EN
-#define	PROTOU_GPIO_CPLD_RST       (98)
-#define	PROTOU_GPIO_CPLD_SPI_CS    (121)
-#define	PROTOU_GPIO_CPLD_CLK       (109)
 
 struct bahama_config_register {
 	u8 reg;
@@ -142,11 +106,13 @@ struct bt_vreg_info {
 void __init msm7627a_bt_power_init(void);
 #endif
 
-void __init protou_camera_init(void);
+extern struct platform_device msm_device_snd;
+extern struct platform_device msm_device_adspdec;
+extern struct platform_device msm_device_cad;
+
+void __init msm7627a_camera_init(void);
+int lcd_camera_power_onoff(int on);
 
 void __init msm7627a_add_io_devices(void);
 void __init qrd7627a_add_io_devices(void);
-int __init protou_init_panel(void);
-
-extern int panel_type;
 #endif

@@ -11,19 +11,31 @@
  *
  */
 
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/platform_device.h>
+#include <linux/delay.h>
+#include <linux/mmc/host.h>
+#include <linux/mmc/sdio_ids.h>
+#include <linux/err.h>
+#include <linux/debugfs.h>
+#include <linux/gpio.h>
+#include <linux/irq.h>
+#include <asm/gpio.h>
+#include <asm/io.h>
 #include <asm/mach-types.h>
 #include <asm/mach/mmc.h>
 #include <linux/regulator/consumer.h>
 #include <mach/gpio.h>
+#include <asm/gpio.h>
 #include <mach/gpiomux.h>
 #include <mach/board.h>
-
 #include "devices.h"
 #include "pm.h"
 #include "board-msm7627a.h"
 #include <linux/mmc/card.h>
 
-//#define QCT_original
+extern int msm_add_sdcc(unsigned int controller, struct mmc_platform_data *plat);
 
 #if (defined(CONFIG_MMC_MSM_SDC1_SUPPORT)\
 	|| defined(CONFIG_MMC_MSM_SDC2_SUPPORT)\
@@ -39,13 +51,6 @@ struct sdcc_gpio {
 	struct msm_gpio *sleep_cfg_data;
 };
 
-/**
- * Due to insufficient drive strengths for SDC GPIO lines some old versioned
- * SD/MMC cards may cause data CRC errors. Hence, set optimal values
- * for SDC slots based on timing closure and marginality. SDC1 slot
- * require higher value since it should handle bad signal quality due
- * to size of T-flash adapters.
- */
 static struct msm_gpio sdc1_cfg_data[] = {
 	{GPIO_CFG(51, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc1_dat_3"},
@@ -63,20 +68,18 @@ static struct msm_gpio sdc1_cfg_data[] = {
 
 static struct msm_gpio sdc1_sleep_cfg_data[] = {
 	{GPIO_CFG(51, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA),
-								"sdc2_clk"},
+								"sdc1_dat_3"},
 	{GPIO_CFG(52, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-								"sdc2_cmd"},
+								"sdc1_dat_2"},
 	{GPIO_CFG(53, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-								"sdc2_dat_3"},
+								"sdc1_dat_1"},
 	{GPIO_CFG(54, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-								"sdc2_dat_2"},
+								"sdc1_dat_0"},
 	{GPIO_CFG(55, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-								"sdc2_dat_1"},
+								"sdc1_cmd"},
 	{GPIO_CFG(56, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_2MA),
-								"sdc2_dat_0"},
+								"sdc1_clk"},
 };
-
-//----------WIFI----------
 
 static struct msm_gpio sdc2_cfg_data[] = {
 	{GPIO_CFG(62, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
@@ -108,324 +111,27 @@ static struct msm_gpio sdc2_sleep_cfg_data[] = {
 								"sdc2_dat_0"},
 };
 
-static uint32_t wifi_on_gpio_table[] = {
-	GPIO_CFG(64, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT3 */
-	GPIO_CFG(65, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT2 */
-	GPIO_CFG(66, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT1 */
-	GPIO_CFG(67, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* DAT0 */
-	GPIO_CFG(63, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), /* CMD */
-	GPIO_CFG(62, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA), /* CLK */
-	GPIO_CFG(29, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA), /* WLAN IRQ */
-};
-
-static uint32_t wifi_off_gpio_table[] = {
-	GPIO_CFG(64, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT3 */
-	GPIO_CFG(65, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT2 */
-	GPIO_CFG(66, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT1 */
-	GPIO_CFG(67, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* DAT0 */
-	GPIO_CFG(63, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), /* CMD */
-	GPIO_CFG(62, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), /* CLK */
-	GPIO_CFG(29, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_4MA), /* WLAN IRQ */
-};
-
-static void config_gpio_table(uint32_t *table, int len)
-{
-		int n, rc;
-		for (n = 0; n < len; n++) {
-				rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
-				if (rc) {
-						pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
-								__func__, table[n], rc);
-						break;
-				}
-		}
-}
-
-static void (*wifi_status_cb)(int card_present, void *dev_id);
-static void *wifi_status_cb_devid;
-#if defined(CONFIG_MACH_PROTODCG)
-/* BCM4329 returns wrong sdio_vsn(1) when we read cccr,
- * we use predefined value (sdio_vsn=2) here to initial sdio driver well
- */
-static struct embedded_sdio_data protodcg_wifi_emb_data = {
-	.cccr	= {
-		.sdio_vsn	= 2,
-		.multi_block	= 1,
-		.low_speed	= 0,
-		.wide_bus	= 0,
-		.high_power	= 1,
-		.high_speed	= 1,
-	}
-};
-
-static int
-protodcg_wifi_status_register(void (*callback)(int card_present, void *dev_id),
-				void *dev_id)
-{
-	if (wifi_status_cb)
-		return -EAGAIN;
-	wifi_status_cb = callback;
-	wifi_status_cb_devid = dev_id;
-	return 0;
-}
-
-static int protodcg_wifi_cd;	/* WiFi virtual 'card detect' status */
-
-static unsigned int protodcg_wifi_status(struct device *dev)
-{
-	return protodcg_wifi_cd;
-}
-
-
-static unsigned int protodcg_wifislot_type = MMC_TYPE_SDIO_WIFI;
-static struct mmc_platform_data protodcg_wifi_data = {
-		.ocr_mask               = MMC_VDD_28_29,
-		.status                 = protodcg_wifi_status,
-		.register_status_notify = protodcg_wifi_status_register,
-		.embedded_sdio          = &protodcg_wifi_emb_data,
-		.slot_type	= &protodcg_wifislot_type,
-		.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
-		.msmsdcc_fmin   = 144000,
-		.msmsdcc_fmid   = 25000000,
-		.msmsdcc_fmax   = 50000000,
-		.nonremovable   = 0,
-		/* HTC_WIFI_MOD, temp remove dummy52
-		.dummy52_required = 1, */
-};
-
-int protodcg_wifi_set_carddetect(int val)
-{
-	printk(KERN_INFO "%s: %d\n", __func__, val);
-	protodcg_wifi_cd = val;
-	if (wifi_status_cb)
-		wifi_status_cb(val, wifi_status_cb_devid);
-	else
-		printk(KERN_WARNING "%s: Nobody to notify\n", __func__);
-	return 0;
-}
-EXPORT_SYMBOL(protodcg_wifi_set_carddetect);
-
-int protodcg_wifi_power(int on)
-{
-	printk(KERN_INFO "[WLAN]%s: %d\n", __func__, on);
-
-	if (on) {
-	   config_gpio_table(wifi_on_gpio_table,
-				ARRAY_SIZE(wifi_on_gpio_table));
-	} else {
-      config_gpio_table(wifi_off_gpio_table,
-				ARRAY_SIZE(wifi_off_gpio_table));
-	}
-
-	/* protodcg_wifi_bt_sleep_clk_ctl(on, ID_WIFI); */
-	gpio_set_value(13, on); /* WIFI_SHUTDOWN */
-	mdelay(120);
-	return 0;
-}
-EXPORT_SYMBOL(protodcg_wifi_power);
-
-int protodcg_wifi_reset(int on)
-{
-	printk(KERN_INFO "%s: do nothing\n", __func__);
-	return 0;
-}
-#elif defined(CONFIG_MACH_MAGNIDS)
-/* BCM4329 returns wrong sdio_vsn(1) when we read cccr,
- * we use predefined value (sdio_vsn=2) here to initial sdio driver well
- */
-static struct embedded_sdio_data magnids_wifi_emb_data = {
-	.cccr	= {
-		.sdio_vsn	= 2,
-		.multi_block	= 1,
-		.low_speed	= 0,
-		.wide_bus	= 0,
-		.high_power	= 1,
-		.high_speed	= 1,
-	}
-};
-
-static int
-magnids_wifi_status_register(void (*callback)(int card_present, void *dev_id),
-				void *dev_id)
-{
-	if (wifi_status_cb)
-		return -EAGAIN;
-	wifi_status_cb = callback;
-	wifi_status_cb_devid = dev_id;
-	return 0;
-}
-
-static int magnids_wifi_cd;	/* WiFi virtual 'card detect' status */
-
-static unsigned int magnids_wifi_status(struct device *dev)
-{
-	return magnids_wifi_cd;
-}
-
-
-static unsigned int magnids_wifislot_type = MMC_TYPE_SDIO_WIFI;
-static struct mmc_platform_data magnids_wifi_data = {
-		.ocr_mask               = MMC_VDD_28_29,
-		.status                 = magnids_wifi_status,
-		.register_status_notify = magnids_wifi_status_register,
-		.embedded_sdio          = &magnids_wifi_emb_data,
-		.slot_type	= &magnids_wifislot_type,
-		.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
-		.msmsdcc_fmin   = 144000,
-		.msmsdcc_fmid   = 25000000,
-		.msmsdcc_fmax   = 50000000,
-		.nonremovable   = 0,
-		/* HTC_WIFI_MOD, temp remove dummy52
-		.dummy52_required = 1, */
-};
-
-int magnids_wifi_set_carddetect(int val)
-{
-	printk(KERN_INFO "%s: %d\n", __func__, val);
-	magnids_wifi_cd = val;
-	if (wifi_status_cb)
-		wifi_status_cb(val, wifi_status_cb_devid);
-	else
-		printk(KERN_WARNING "%s: Nobody to notify\n", __func__);
-	return 0;
-}
-EXPORT_SYMBOL(magnids_wifi_set_carddetect);
-
-int magnids_wifi_power(int on)
-{
-	printk(KERN_INFO "[WLAN]%s: %d\n", __func__, on);
-
-	if (on) {
-	   config_gpio_table(wifi_on_gpio_table,
-				ARRAY_SIZE(wifi_on_gpio_table));
-	} else {
-      config_gpio_table(wifi_off_gpio_table,
-				ARRAY_SIZE(wifi_off_gpio_table));
-	}
-
-	/* magnids_wifi_bt_sleep_clk_ctl(on, ID_WIFI); */
-	gpio_set_value(13, on); /* WIFI_SHUTDOWN */
-	mdelay(120);
-	return 0;
-}
-EXPORT_SYMBOL(magnids_wifi_power);
-
-int magnids_wifi_reset(int on)
-{
-	printk(KERN_INFO "%s: do nothing\n", __func__);
-	return 0;
-}
-#else
-/* BCM4329 returns wrong sdio_vsn(1) when we read cccr,
- * we use predefined value (sdio_vsn=2) here to initial sdio driver well
- */
-static struct embedded_sdio_data protou_wifi_emb_data = {
-	.cccr	= {
-		.sdio_vsn	= 2,
-		.multi_block	= 1,
-		.low_speed	= 0,
-		.wide_bus	= 0,
-		.high_power	= 1,
-		.high_speed	= 1,
-	}
-};
-
-static int
-protou_wifi_status_register(void (*callback)(int card_present, void *dev_id),
-				void *dev_id)
-{
-	if (wifi_status_cb)
-		return -EAGAIN;
-	wifi_status_cb = callback;
-	wifi_status_cb_devid = dev_id;
-	return 0;
-}
-
-static int protou_wifi_cd;	/* WiFi virtual 'card detect' status */
-
-static unsigned int protou_wifi_status(struct device *dev)
-{
-	return protou_wifi_cd;
-}
-
-
-static unsigned int protou_wifislot_type = MMC_TYPE_SDIO_WIFI;
-static struct mmc_platform_data protou_wifi_data = {
-		.ocr_mask               = MMC_VDD_28_29,
-		.status                 = protou_wifi_status,
-		.register_status_notify = protou_wifi_status_register,
-		.embedded_sdio          = &protou_wifi_emb_data,
-		.slot_type	= &protou_wifislot_type,
-		.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
-		.msmsdcc_fmin   = 144000,
-		.msmsdcc_fmid   = 25000000,
-		.msmsdcc_fmax   = 50000000,
-		.nonremovable   = 0,
-		/* HTC_WIFI_MOD, temp remove dummy52
-		.dummy52_required = 1, */
-};
-
-int protou_wifi_set_carddetect(int val)
-{
-	printk(KERN_INFO "%s: %d\n", __func__, val);
-	protou_wifi_cd = val;
-	if (wifi_status_cb)
-		wifi_status_cb(val, wifi_status_cb_devid);
-	else
-		printk(KERN_WARNING "%s: Nobody to notify\n", __func__);
-	return 0;
-}
-EXPORT_SYMBOL(protou_wifi_set_carddetect);
-
-int protou_wifi_power(int on)
-{
-	printk(KERN_INFO "[WLAN]%s: %d\n", __func__, on);
-
-	if (on) {
-	   config_gpio_table(wifi_on_gpio_table,
-				ARRAY_SIZE(wifi_on_gpio_table));
-	} else {
-      config_gpio_table(wifi_off_gpio_table,
-				ARRAY_SIZE(wifi_off_gpio_table));
-	}
-
-	/* protou_wifi_bt_sleep_clk_ctl(on, ID_WIFI); */
-	gpio_set_value(13, on); /* WIFI_SHUTDOWN */
-	mdelay(120);
-	return 0;
-}
-EXPORT_SYMBOL(protou_wifi_power);
-
-int protou_wifi_reset(int on)
-{
-	printk(KERN_INFO "%s: do nothing\n", __func__);
-	return 0;
-}
-#endif
-
-//----------WIFI END----------
-
 static struct msm_gpio sdc3_cfg_data[] = {
-	{GPIO_CFG(88, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA),
+	{GPIO_CFG(88, 1, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_16MA),
 								"sdc3_clk"},
-	{GPIO_CFG(89, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(89, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_cmd"},
-	{GPIO_CFG(90, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(90, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_3"},
-	{GPIO_CFG(91, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(91, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_2"},
-	{GPIO_CFG(92, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(92, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_1"},
-	{GPIO_CFG(93, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(93, 1, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_0"},
 #ifdef CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT
-	{GPIO_CFG(19, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(19, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_7"},
-	{GPIO_CFG(20, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(20, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_6"},
-	{GPIO_CFG(21, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(21, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_5"},
-	{GPIO_CFG(108, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA),
+	{GPIO_CFG(108, 3, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_12MA),
 								"sdc3_dat_4"},
 #endif
 };
@@ -605,6 +311,7 @@ static struct mmc_platform_data sdc1_plat_data = {
 	.msmsdcc_fmid   = 25000000,
 	.msmsdcc_fmax   = 50000000,
 	.slot_type      = &msm7627a_sdslot_type,
+	.mmc_dma_ch    = 10,
 #ifdef CONFIG_MMC_MSM_CARD_HW_DETECTION
 	.status      = msm7627a_sdcc_slot_status,
 	.irq_flags   = IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING,
@@ -612,21 +319,81 @@ static struct mmc_platform_data sdc1_plat_data = {
 };
 #endif
 
-#if 0
+
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) \
+    || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_PROTOU))
+static struct embedded_sdio_data bcm4330_wifi_emb_data = {
+	.cccr	= {
+		.sdio_vsn	= 2,
+		.multi_block	= 1,
+		.low_speed	= 0,
+		.wide_bus	= 0,
+		.high_power	= 1,
+		.high_speed	= 1,
+	}
+};
+
+static void (*wifi_status_cb)(int card_present, void *dev_id);
+static void *wifi_status_cb_devid;
+
+static int
+bcm4330_wifi_status_register(void (*callback)(int card_present, void *dev_id),
+				void *dev_id)
+{
+	if (wifi_status_cb)
+		return -EAGAIN;
+	wifi_status_cb = callback;
+	wifi_status_cb_devid = dev_id;
+	return 0;
+}
+
+static int bcm4330_wifi_cd;	
+
+static unsigned int bcm4330_wifi_status(struct device *dev)
+{
+	return bcm4330_wifi_cd;
+}
+
+static unsigned int bcm4330_wifislot_type = MMC_TYPE_SDIO_WIFI;
+static struct mmc_platform_data bcm4330_wifi_data = {
+		.ocr_mask               = MMC_VDD_28_29,
+		.status                 = bcm4330_wifi_status,
+		.register_status_notify = bcm4330_wifi_status_register,
+		.embedded_sdio          = &bcm4330_wifi_emb_data,
+		.slot_type	= &bcm4330_wifislot_type,
+		.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
+		.msmsdcc_fmin   = 144000,
+		.msmsdcc_fmid   = 25000000,
+		.msmsdcc_fmax   = 50000000,
+		.nonremovable   = 0,
+};
+
+int bcm4330_wifi_set_carddetect(int val)
+{
+        printk(KERN_INFO "%s: %d\n", __func__, val);
+        bcm4330_wifi_cd = val;
+        if (wifi_status_cb)
+                wifi_status_cb(val, wifi_status_cb_devid);
+        else
+                printk(KERN_WARNING "%s: Nobody to notify\n", __func__);
+        return 0;
+}
+#endif
+
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) \
+    || defined(CONFIG_MACH_DUMMY))
+static unsigned int atheros_wifislot_type = MMC_TYPE_SDIO_WIFI;
 static struct mmc_platform_data sdc2_plat_data = {
-	/*
-	 * SDC2 supports only 1.8V, claim for 2.85V range is just
-	 * for allowing buggy cards who advertise 2.8V even though
-	 * they can operate at 1.8V supply.
-	 */
 	.ocr_mask       = MMC_VDD_28_29 | MMC_VDD_165_195,
 	.translate_vdd  = msm_sdcc_setup_power,
+	.slot_type	= &atheros_wifislot_type,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.sdiowakeup_irq = MSM_GPIO_TO_INT(66),
 	.msmsdcc_fmin   = 144000,
-	.msmsdcc_fmid   = 24576000,
-	.msmsdcc_fmax   = 49152000,
+	.msmsdcc_fmid   = 24000000,
+	.msmsdcc_fmax   = 50000000,
+	.nonremovable   = 0,
 #ifdef CONFIG_MMC_MSM_SDC2_DUMMY52_REQUIRED
 	.dummy52_required = 1,
 #endif
@@ -638,7 +405,7 @@ static struct mmc_platform_data sdc2_plat_data = {
 static unsigned int msm7627a_emmcslot_type = MMC_TYPE_MMC;
 static struct mmc_platform_data sdc3_plat_data = {
 	.ocr_mask       = MMC_VDD_28_29,
-	/*.translate_vdd  = msm_sdcc_setup_power,*/
+	
 #ifdef CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT
 	.mmc_bus_width  = MMC_CAP_8_BIT_DATA,
 #else
@@ -648,21 +415,34 @@ static struct mmc_platform_data sdc3_plat_data = {
 	.msmsdcc_fmid   = 25000000,
 	.msmsdcc_fmax   = 50000000,
 	.nonremovable   = 1,
-	.emmc_dma_ch    = 7,
+	.mmc_dma_ch    = 7,
 	.slot_type      = &msm7627a_emmcslot_type,
 };
 #endif
 
 #if (defined(CONFIG_MMC_MSM_SDC4_SUPPORT)\
 		&& !defined(CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT))
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
+static unsigned int msm7627a_sprdslot_type = MMC_TYPE_SDIO_SPRD;
 static struct mmc_platform_data sdc4_plat_data = {
-	.ocr_mask       = MMC_VDD_28_29,
-	.translate_vdd  = msm_sdcc_setup_power,
+	.ocr_mask       = MMC_VDD_165_195,
 	.mmc_bus_width  = MMC_CAP_4_BIT_DATA,
 	.msmsdcc_fmin   = 144000,
-	.msmsdcc_fmid   = 24576000,
-	.msmsdcc_fmax   = 49152000,
+	.msmsdcc_fmid   = 25000000,
+	.msmsdcc_fmax   = 25000000,
+	.slot_type	= &msm7627a_sprdslot_type,
+	.nonremovable	= 0,
 };
+#else
+static struct mmc_platform_data sdc4_plat_data = {
+	.ocr_mask	= MMC_VDD_28_29,
+	.translate_vdd	= msm_sdcc_setup_power,
+	.mmc_bus_width	= MMC_CAP_4_BIT_DATA,
+	.msmsdcc_fmin	= 144000,
+	.msmsdcc_fmid	= 24576000,
+	.msmsdcc_fmax	= 49152000,
+};
+#endif
 #endif
 
 static int __init mmc_regulator_init(int sdcc_no, const char *supply, int uV)
@@ -702,17 +482,17 @@ out:
 #ifdef QCT_original
 void __init msm7627a_init_mmc(void)
 {
-	/* eMMC slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 
-	/* There is no eMMC on SDC3 for QRD3 based devices */
+	
 	if (!(machine_is_msm7627a_qrd3() || machine_is_msm8625_qrd7())) {
 		if (mmc_regulator_init(3, "emmc", 3000000))
 			return;
 		msm_add_sdcc(3, &sdc3_plat_data);
 	}
 #endif
-	/* Micro-SD slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	gpio_sdc1_config();
 	if (mmc_regulator_init(1, "mmc", 2850000))
@@ -720,16 +500,16 @@ void __init msm7627a_init_mmc(void)
 	sdc1_plat_data.status_irq = MSM_GPIO_TO_INT(gpio_sdc1_hw_det);
 	msm_add_sdcc(1, &sdc1_plat_data);
 #endif
-	/* SDIO WLAN slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (mmc_regulator_init(2, "smps3", 1800000))
 		return;
 	msm_add_sdcc(2, &sdc2_plat_data);
 #endif
-	/* Not Used */
+	
 #if (defined(CONFIG_MMC_MSM_SDC4_SUPPORT)\
 		&& !defined(CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT))
-	/* There is no SDC4 for QRD3/7 based devices */
+	
 	if (!(machine_is_msm7627a_qrd3() || machine_is_msm8625_qrd7())) {
 		if (mmc_regulator_init(4, "smps3", 1800000))
 			return;
@@ -741,7 +521,7 @@ void __init msm7627a_init_mmc(void)
 void __init msm7627a_init_mmc(void)
 {
 	printk(KERN_ERR "%s: HTC 0\n", __func__);
-	/* eMMC slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC3_SUPPORT
 
 	if (mmc_regulator_init(3, "emmc", 3000000))
@@ -749,7 +529,7 @@ void __init msm7627a_init_mmc(void)
 	msm_add_sdcc(3, &sdc3_plat_data);
 #endif
 	printk(KERN_ERR "%s: HTC 1\n", __func__);
-	/* Micro-SD slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC1_SUPPORT
 	gpio_sdc1_config();
 	if (mmc_regulator_init(1, "mmc", 2850000))
@@ -757,22 +537,24 @@ void __init msm7627a_init_mmc(void)
 	sdc1_plat_data.status_irq = MSM_GPIO_TO_INT(gpio_sdc1_hw_det);
 	msm_add_sdcc(1, &sdc1_plat_data);
 #endif
-	/* SDIO WLAN slot */
+	
 #ifdef CONFIG_MMC_MSM_SDC2_SUPPORT
 	if (mmc_regulator_init(2, "smps3", 1800000))
 		return;
-#if defined(CONFIG_MACH_PROTODCG)
-	msm_add_sdcc(2, &protodcg_wifi_data); //BRCM WIFI
-#elif defined(CONFIG_MACH_MAGNIDS)
-	msm_add_sdcc(2, &magnids_wifi_data); //BRCM WIFI
-#else
-	msm_add_sdcc(2, &protou_wifi_data); //BRCM WIFI
+
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) \
+    || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_PROTOU))
+	msm_add_sdcc(2, &bcm4330_wifi_data); 
+#endif
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) \
+    || defined(CONFIG_MACH_DUMMY))
+	msm_add_sdcc(2, &sdc2_plat_data);  
 #endif
 #endif
-	/* Not Used */
+	
 #if (defined(CONFIG_MMC_MSM_SDC4_SUPPORT)\
 		&& !defined(CONFIG_MMC_MSM_SDC3_8_BIT_SUPPORT))
-	/* There is no SDC4 for QRD3/7 based devices */
+	
 	if (!(machine_is_msm7627a_qrd3() || machine_is_msm8625_qrd7())) {
 		if (mmc_regulator_init(4, "smps3", 1800000))
 			return;

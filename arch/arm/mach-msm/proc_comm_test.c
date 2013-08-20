@@ -11,15 +11,12 @@
  *
  */
 
-/*
- * PROC COMM TEST Driver source file
- */
 
 #include <linux/types.h>
 #include <linux/uaccess.h>
 #include <linux/debugfs.h>
 #include <linux/module.h>
-#include "proc_comm.h"
+#include <mach/proc_comm.h>
 
 static struct dentry *dent;
 static int proc_comm_test_res;
@@ -29,17 +26,15 @@ static int proc_comm_reverse_test(void)
 	uint32_t data1, data2;
 	int rc;
 
-	data1 = 10;
-	data2 = 20;
+	data1 = 5;
+	data2 = 0;
 
-	rc = msm_proc_comm(PCOM_OEM_TEST_CMD, &data1, &data2);
-	if (rc)
+	rc = msm_proc_comm(PCOM_CUSTOMER_CMD3, &data1, &data2);
+	pr_info("read adc return data1: %d, data2: %d\n", data1, data2);
+	if (rc < 0)
 		return rc;
 
-	if ((data1 != 20) || (data2 != 10))
-		return -1;
-
-	return 0;
+	return data2;
 }
 
 static ssize_t debug_read(struct file *fp, char __user *buf,
@@ -55,7 +50,6 @@ static ssize_t debug_read(struct file *fp, char __user *buf,
 static ssize_t debug_write(struct file *fp, const char __user *buf,
 			   size_t count, loff_t *pos)
 {
-
 	unsigned char cmd[64];
 	int len;
 
@@ -78,12 +72,6 @@ static ssize_t debug_write(struct file *fp, const char __user *buf,
 		proc_comm_test_res = proc_comm_reverse_test();
 	else
 		proc_comm_test_res = -EINVAL;
-
-	if (proc_comm_test_res)
-		pr_err("proc comm test fail %d\n",
-		       proc_comm_test_res);
-	else
-		pr_info("proc comm test passed\n");
 
 	return count;
 }

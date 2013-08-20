@@ -12,13 +12,14 @@
 
 #include <mach/dal_axi.h>
 
-/* The AXI device ID */
 #define DALDEVICEID_AXI   0x02000053
 #define DALRPC_PORT_NAME  "DAL00"
 
 enum {
 	DALRPC_AXI_ALLOCATE = DALDEVICE_FIRST_DEVICE_API_IDX + 1,
 	DALRPC_AXI_FREE = DALDEVICE_FIRST_DEVICE_API_IDX + 2,
+	DALRPC_AXI_HALT = DALDEVICE_FIRST_DEVICE_API_IDX + 3,
+	DALRPC_AXI_UNHALT = DALDEVICE_FIRST_DEVICE_API_IDX + 4,
 	DALRPC_AXI_CONFIGURE_BRIDGE = DALDEVICE_FIRST_DEVICE_API_IDX + 11
 };
 
@@ -33,7 +34,7 @@ enum {
 	DAL_AXI_BRIDGE_CFG_CGR_SS_3DGRP_ISOSYNC_MODE,
 	DAL_AXI_BRIDGE_CFG_CGR_SS_3DGRP_DEBUG_EN,
 	DAL_AXI_BRIDGE_CFG_CGR_SS_3DGRP_DEBUG_DIS,
-	/* 7x27(A) Graphics Subsystem Bridge Configuration */
+	
 	DAL_AXI_BRIDGE_CFG_GRPSS_XBAR_SYNC_MODE = 58,
 	DAL_AXI_BRIDGE_CFG_GRPSS_XBAR_ASYNC_MODE = 59,
 	DAL_AXI_BRIDGE_CFG_GRPSS_XBAR_ISOSYNC_MODE = 60
@@ -43,33 +44,32 @@ enum {
 static void *cam_dev_handle;
 static int __axi_free(int mode)
 {
-	int rc;
+	int rc = 0;
 
-	rc = dalrpc_fcn_0(
-		DALRPC_AXI_FREE, cam_dev_handle,
-		mode
-	);
+	if (!cam_dev_handle)
+		return rc;
+
+	rc = dalrpc_fcn_0(DALRPC_AXI_FREE, cam_dev_handle, mode);
 	if (rc) {
 		printk(KERN_ERR "%s: AXI bus device (%d) failed to be configured\n",
 			__func__, rc);
 		goto fail_dal_fcn_0;
 	}
 
-	/* close device handle */
+	
 	rc = daldevice_detach(cam_dev_handle);
 	if (rc) {
 		printk(KERN_ERR "%s: failed to detach AXI bus device (%d)\n",
 			__func__, rc);
 		goto fail_dal_attach_detach;
 	}
-
-	pr_info("CAMERA: __axi_free:\n");
+	cam_dev_handle = NULL;
 	return 0;
 
 fail_dal_fcn_0:
 	(void)daldevice_detach(cam_dev_handle);
+	cam_dev_handle = NULL;
 fail_dal_attach_detach:
-
 	return rc;
 }
 
@@ -77,35 +77,67 @@ static int __axi_allocate(int mode)
 {
 	int rc;
 
-	/* get device handle */
-	rc = daldevice_attach(
-		DALDEVICEID_AXI, DALRPC_PORT_NAME,
-		DALRPC_DEST_MODEM, &cam_dev_handle
-	);
+	
+	rc = daldevice_attach(DALDEVICEID_AXI, DALRPC_PORT_NAME,
+				DALRPC_DEST_MODEM, &cam_dev_handle);
 	if (rc) {
 		printk(KERN_ERR "%s: failed to attach AXI bus device (%d)\n",
 			__func__, rc);
 		goto fail_dal_attach_detach;
 	}
 
-	rc = dalrpc_fcn_0(
-		DALRPC_AXI_ALLOCATE, cam_dev_handle,
-		mode
-	);
+	rc = dalrpc_fcn_0(DALRPC_AXI_ALLOCATE, cam_dev_handle, mode);
 	if (rc) {
 		printk(KERN_ERR "%s: AXI bus device (%d) failed to be configured\n",
 			__func__, rc);
 		goto fail_dal_fcn_0;
 	}
 
-	pr_info("CAMERA: __axi_allocate:\n");
 	return 0;
 
 fail_dal_fcn_0:
 	(void)daldevice_detach(cam_dev_handle);
+	cam_dev_handle = NULL;
 fail_dal_attach_detach:
-
 	return rc;
+}
+
+static void *halt_dev_handle;
+
+static int __axi_halt(int port)
+{
+        int rc = 0;
+
+        
+        rc = daldevice_attach(
+                DALDEVICEID_AXI, DALRPC_PORT_NAME,
+                DALRPC_DEST_MODEM, &halt_dev_handle
+        );
+        if (rc) {
+                printk(KERN_ERR "%s: failed to attach AXI bus device (%d)\n",
+                        __func__, rc);
+                goto fail_dal_attach_detach;
+        }
+
+        rc = dalrpc_fcn_0(
+                DALRPC_AXI_HALT, halt_dev_handle,
+                port
+        );
+        if (rc) {
+                printk(KERN_ERR "%s: AXI bus device (%d) failed to be HALTED\n",
+                        __func__, rc);
+        }
+        rc = dalrpc_fcn_0(
+                DALRPC_AXI_UNHALT, halt_dev_handle,
+                port);
+        if (rc) {
+                printk(KERN_ERR "%s: AXI bus device (%d) failed to be UNHALTED\n",
+                        __func__, rc);
+        }
+        daldevice_detach(halt_dev_handle);
+        return 0;
+fail_dal_attach_detach:
+        return 0;
 }
 
 static int axi_configure_bridge_grfx_sync_mode(int bridge_mode)
@@ -113,7 +145,7 @@ static int axi_configure_bridge_grfx_sync_mode(int bridge_mode)
 	int rc;
 	void *dev_handle;
 
-	/* get device handle */
+	
 	rc = daldevice_attach(
 		DALDEVICEID_AXI, DALRPC_PORT_NAME,
 		DALRPC_DEST_MODEM, &dev_handle
@@ -124,7 +156,7 @@ static int axi_configure_bridge_grfx_sync_mode(int bridge_mode)
 		goto fail_dal_attach_detach;
 	}
 
-	/* call ConfigureBridge */
+	
 	rc = dalrpc_fcn_0(
 		DALRPC_AXI_CONFIGURE_BRIDGE, dev_handle,
 		bridge_mode
@@ -135,7 +167,7 @@ static int axi_configure_bridge_grfx_sync_mode(int bridge_mode)
 		goto fail_dal_fcn_0;
 	}
 
-	/* close device handle */
+	
 	rc = daldevice_detach(dev_handle);
 	if (rc) {
 		printk(KERN_ERR "%s: failed to detach AXI bus device (%d)\n",
@@ -151,16 +183,19 @@ fail_dal_attach_detach:
 
 	return rc;
 }
+int axi_halt(int port)
+{
+	pr_info("CAMERA: axi_halt\n");
+	return __axi_halt(port);
+}
 
 int axi_free(mode)
 {
-	pr_info("CAMERA: axi_free\n");
 	return __axi_free(mode);
 }
- 
+
 int axi_allocate(mode)
 {
-	pr_info("CAMERA: axi_allocate\n");
 	return __axi_allocate(mode);
 }
 

@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/module.h>
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/types.h>
@@ -23,14 +24,15 @@
 #include "msm_csic.h"
 #include "msm_csiphy.h"
 #include "msm_ispif.h"
-#include "msm_sensor.h"
-#include "msm_actuator.h"
-#include "msm_vfe32.h"
-#include "msm_camera_eeprom.h"
 
-//HTC_START howard 20111209
+#include "msm_sensor.h"
+#include "msm_vfe32.h"
+
 #include <linux/switch.h>
-//HTC_END
+
+#ifdef CONFIG_RAWCHIP
+#include "rawchip/rawchip.h"
+#endif
 
 #define MSM_MAX_CAMERA_SENSORS 5
 
@@ -80,12 +82,12 @@ static void msm_enqueue(struct msm_device_queue *queue,
 	D("%s: woke up %s\n", __func__, queue->name);
 	spin_unlock_irqrestore(&queue->lock, flags);
 }
-
 static void msm_drain_eventq(struct msm_device_queue *queue)
 {
 	unsigned long flags;
 	struct msm_queue_cmd *qcmd;
 	struct msm_isp_event_ctrl *isp_event;
+
 	spin_lock_irqsave(&queue->lock, flags);
 	while (!list_empty(&queue->list)) {
 		qcmd = list_first_entry(&queue->list,
@@ -96,6 +98,7 @@ static void msm_drain_eventq(struct msm_device_queue *queue)
 			qcmd->command;
 		if (isp_event->isp_data.ctrl.value != NULL)
 			kfree(isp_event->isp_data.ctrl.value);
+
 		kfree(qcmd->command);
 		free_qcmd(qcmd);
 	}
@@ -152,7 +155,6 @@ void msm_camera_free_mctl(uint32_t handle)
 		pr_err("%s: invalid free handle\n", __func__);
 }
 
-/* callback function from all subdevices of a msm_cam_v4l2_device */
 static void msm_cam_v4l2_subdev_notify(struct v4l2_subdev *sd,
 				unsigned int notification, void *arg)
 {
@@ -166,10 +168,10 @@ static void msm_cam_v4l2_subdev_notify(struct v4l2_subdev *sd,
 
 	if (pcam == NULL)
 		return;
-
 	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
 	if (pmctl == NULL)
 		return;
+
 }
 
 static int msm_ctrl_cmd_done(void *arg)
@@ -181,18 +183,19 @@ static int msm_ctrl_cmd_done(void *arg)
 	D("%s\n", __func__);
 
 	command = kzalloc(sizeof(struct msm_ctrl_cmd), GFP_KERNEL);
+
 	if (!command) {
 		pr_err("%s Insufficient memory. return", __func__);
 		goto command_alloc_fail;
 	}
-
-	qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
-	if (!qcmd) {
-		pr_err("%s Insufficient memory. return", __func__);
-		goto qcmd_alloc_fail;
-	}
-
-	mutex_lock(&g_server_dev.server_queue_lock);
+ 
+ 	 qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
+ 	 if (!qcmd) {
+ 		 pr_err("%s Insufficient memory. return", __func__);
+ 		 goto qcmd_alloc_fail;
+ 	 }
+ 
+ 	 mutex_lock(&g_server_dev.server_queue_lock);
 	if (copy_from_user(command, (void __user *)ioctl_ptr->ioctl_ptr,
 					   sizeof(struct msm_ctrl_cmd))) {
 		pr_err("%s: copy_from_user failed, size=%d\n",
@@ -204,10 +207,10 @@ static int msm_ctrl_cmd_done(void *arg)
 		pr_err("%s: Invalid queue\n", __func__);
 		goto ctrl_cmd_done_error;
 	}
-
 	D("%s qid %d evtid %d %d\n", __func__, command->queue_idx,
 		command->evt_id,
 		g_server_dev.server_queue[command->queue_idx].evt_id);
+
 	if (command->evt_id !=
 		g_server_dev.server_queue[command->queue_idx].evt_id) {
 		pr_err("%s Invalid event id from userspace cmd id %d %d qid %d\n",
@@ -216,7 +219,6 @@ static int msm_ctrl_cmd_done(void *arg)
 			command->queue_idx);
 		goto ctrl_cmd_done_error;
 	}
-
 	atomic_set(&qcmd->on_heap, 1);
 	uptr = command->value;
 	qcmd->command = command;
@@ -236,6 +238,7 @@ static int msm_ctrl_cmd_done(void *arg)
 			goto ctrl_cmd_done_error;
 		}
 	}
+
 	msm_enqueue(&g_server_dev.server_queue
 		[command->queue_idx].ctrl_q, &qcmd->list_control);
 	mutex_unlock(&g_server_dev.server_queue_lock);
@@ -247,24 +250,45 @@ ctrl_cmd_done_error:
 qcmd_alloc_fail:
 	kfree(command);
 command_alloc_fail:
-	return -EINVAL;
+	return -EINVAL;	
 }
 
-/* send control command to config and wait for results*/
+
+static void msm_cam_stop_hardware(struct msm_cam_v4l2_device *pcam)
+{
+	struct msm_cam_media_controller *pmctl;
+	int rc = 0;
+	if (pcam == NULL)
+		return;
+	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
+	if (pmctl && pmctl->mctl_release) {
+		pr_err("%s: stopping hardware upon error\n", __func__);
+		
+		pmctl->mctl_cmd = NULL;
+	
+		rc = pmctl->mctl_release(pmctl);
+		if (rc < 0)
+			pr_err("mctl_release fails %d\n", rc);
+		pmctl->mctl_release = NULL;
+	}
+}
+
+
 static int msm_server_control(struct msm_cam_server_dev *server_dev,
 				struct msm_ctrl_cmd *out)
 {
 	int rc = 0;
 	void *value;
 	struct msm_queue_cmd *rcmd;
-	struct msm_queue_cmd *event_qcmd;
+	struct msm_queue_cmd *event_qcmd;	
 	struct msm_ctrl_cmd *ctrlcmd;
 	struct msm_device_queue *queue =
 		&server_dev->server_queue[out->queue_idx].ctrl_q;
-
+	struct msm_cam_v4l2_device *pcam = server_dev->pcam_active;
 	struct v4l2_event v4l2_evt;
 	struct msm_isp_event_ctrl *isp_event;
 	void *ctrlcmd_data;
+	int loop = 0; 
 
 	event_qcmd = kzalloc(sizeof(struct msm_queue_cmd), GFP_KERNEL);
 	if (!event_qcmd) {
@@ -284,18 +308,17 @@ static int msm_server_control(struct msm_cam_server_dev *server_dev,
 	mutex_lock(&server_dev->server_queue_lock);
 	if (++server_dev->server_evt_id == 0)
 		server_dev->server_evt_id++;
-	D("%s qid %d evtid %d\n", __func__, out->queue_idx,
-		server_dev->server_evt_id);
-
+ 
+	 D("%s qid %d evtid %d\n", __func__, out->queue_idx,
+		 server_dev->server_evt_id);
 	server_dev->server_queue[out->queue_idx].evt_id =
-		server_dev->server_evt_id;
+		 server_dev->server_evt_id;
 	v4l2_evt.type = V4L2_EVENT_PRIVATE_START + MSM_CAM_RESP_V4L2;
 	v4l2_evt.u.data[0] = out->queue_idx;
-	/* setup event object to transfer the command; */
+	
 	isp_event->resptype = MSM_CAM_RESP_V4L2;
 	isp_event->isp_data.ctrl = *out;
 	isp_event->isp_data.ctrl.evt_id = server_dev->server_evt_id;
-
 	if (out->value != NULL && out->length != 0) {
 		ctrlcmd_data = kzalloc(out->length, GFP_KERNEL);
 		if (!ctrlcmd_data) {
@@ -312,15 +335,15 @@ static int msm_server_control(struct msm_cam_server_dev *server_dev,
 	msm_enqueue(&server_dev->server_queue[out->queue_idx].eventData_q,
 				&event_qcmd->list_eventdata);
 
-	/* now send command to config thread in userspace,
-	 * and wait for results */
 	v4l2_event_queue(server_dev->server_command_queue.pvdev,
 					  &v4l2_evt);
+
 	D("%s v4l2_event_queue: type = 0x%x\n", __func__, v4l2_evt.type);
 	mutex_unlock(&server_dev->server_queue_lock);
-
-	/* wait for config return status */
+	
 	D("Waiting for config status\n");
+
+wait_event:
 	rc = wait_event_interruptible_timeout(queue->wait,
 		!list_empty_careful(&queue->list),
 		msecs_to_jiffies(out->timeout_ms));
@@ -328,39 +351,50 @@ static int msm_server_control(struct msm_cam_server_dev *server_dev,
 	if (list_empty_careful(&queue->list)) {
 		if (!rc)
 			rc = -ETIMEDOUT;
-		if (rc < 0) {
+		if (rc == -ERESTARTSYS && loop < 20) {
+			loop++;
+			msleep(5);
+			pr_info("%s: goto wait_event loop %d\n", __func__, loop);
+			goto wait_event;
+		}
+		else if (rc < 0) {
 			if (++server_dev->server_evt_id == 0)
 				server_dev->server_evt_id++;
 			pr_err("%s: wait_event error %d\n", __func__, rc);
+			
+			pr_info("%s: ctrlcmd.type = %d\n", __func__, out->type);
+			if (out->type == MSM_V4L2_SET_CTRL_CMD) {
+				if (out->value)
+					pr_info("%s: ctrl_cmd.type = %d\n", __func__, 
+						((struct msm_ctrl_cmd *)out->value)->type);
+			}
+			
+			msm_cam_stop_hardware(pcam);
+
 			return rc;
 		}
 	}
 
 	rcmd = msm_dequeue(queue, list_control);
 	BUG_ON(!rcmd);
-	/* HTC_START (klockwork issue)*/
-	if(!rcmd)
-	{
-		pr_err(" %s error when rcmd = msm_dequeue(queue, list_control) \n", __func__);
-		return -EINVAL;
-	}
-	/* HTC_END */
+	if(!rcmd) return -EINVAL;
 	D("%s Finished servicing ioctl\n", __func__);
+
 	ctrlcmd = (struct msm_ctrl_cmd *)(rcmd->command);
 	value = out->value;
 	if (ctrlcmd->length > 0 && value != NULL &&
-	    ctrlcmd->length <= out->length)
+		ctrlcmd->length <= out->length)
 		memcpy(value, ctrlcmd->value, ctrlcmd->length);
 
 	memcpy(out, ctrlcmd, sizeof(struct msm_ctrl_cmd));
 	out->value = value;
-
 	kfree(ctrlcmd);
+
 	free_qcmd(rcmd);
 	D("%s: rc %d\n", __func__, rc);
-	/* rc is the time elapsed. */
+	
 	if (rc >= 0) {
-		/* TODO: Refactor msm_ctrl_cmd::status field */
+		
 		if (out->status == 0)
 			rc = -1;
 		else if (out->status == 1 || out->status == 4)
@@ -375,20 +409,18 @@ ctrlcmd_alloc_fail:
 isp_event_alloc_fail:
 	kfree(event_qcmd);
 event_qcmd_alloc_fail:
-	return rc;
+	return rc;	
 }
 
-/*send open command to server*/
 static int msm_send_open_server(struct msm_cam_v4l2_device *pcam)
 {
 	int rc = 0;
 	struct msm_ctrl_cmd ctrlcmd;
 	D("%s qid %d\n", __func__, pcam->server_queue_idx);
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd)); 
 	ctrlcmd.type	   = MSM_V4L2_OPEN;
-	ctrlcmd.timeout_ms = 10000;
+	ctrlcmd.timeout_ms = 20000;
 	ctrlcmd.length	 = strnlen(g_server_dev.config_info.config_dev_name[0],
 				MAX_DEV_NAME_LEN)+1;
 	ctrlcmd.value    = (char *)g_server_dev.config_info.config_dev_name[0];
@@ -396,7 +428,7 @@ static int msm_send_open_server(struct msm_cam_v4l2_device *pcam)
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	return rc;
@@ -406,12 +438,11 @@ static int msm_send_close_server(struct msm_cam_v4l2_device *pcam)
 {
 	int rc = 0;
 	struct msm_ctrl_cmd ctrlcmd;
-	D("%s qid %d\n", __func__, pcam->server_queue_idx);
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	pr_info("%s qid %d\n", __func__, pcam->server_queue_idx);
+
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd)); 
 	ctrlcmd.type	   = MSM_V4L2_CLOSE;
-	ctrlcmd.timeout_ms = 10000;
+	ctrlcmd.timeout_ms = 20000;
 	ctrlcmd.length	 = strnlen(g_server_dev.config_info.config_dev_name[0],
 				MAX_DEV_NAME_LEN)+1;
 	ctrlcmd.value    = (char *)g_server_dev.config_info.config_dev_name[0];
@@ -419,7 +450,7 @@ static int msm_send_close_server(struct msm_cam_v4l2_device *pcam)
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	return rc;
@@ -456,18 +487,16 @@ static int msm_server_set_fmt(struct msm_cam_v4l2_device *pcam, int idx,
 		return -EINVAL;
 	}
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd)); 
 	ctrlcmd.type       = MSM_V4L2_VID_CAP_TYPE;
 	ctrlcmd.length     = sizeof(struct img_plane_info);
 	ctrlcmd.value      = (void *)&plane_info;
 	ctrlcmd.timeout_ms = 10000;
 	ctrlcmd.vnode_id   = pcam->vnode_id;
-	ctrlcmd.queue_idx = pcam->server_queue_idx;
+	ctrlcmd.queue_idx = pcam->server_queue_idx;	
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	if (rc >= 0) {
@@ -524,17 +553,15 @@ static int msm_server_set_fmt_mplane(struct msm_cam_v4l2_device *pcam, int idx,
 		return -EINVAL;
 	}
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd)); 
 	ctrlcmd.type       = MSM_V4L2_VID_CAP_TYPE;
 	ctrlcmd.length     = sizeof(struct img_plane_info);
 	ctrlcmd.value      = (void *)&plane_info;
-	ctrlcmd.timeout_ms = 10000;
+	ctrlcmd.timeout_ms = 20000;
 	ctrlcmd.vnode_id   = pcam->vnode_id;
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 	if (rc >= 0) {
 		pcam->dev_inst[idx]->vid_fmt = *pfmt;
@@ -555,11 +582,10 @@ static int msm_server_streamon(struct msm_cam_v4l2_device *pcam, int idx)
 	int rc = 0;
 	struct msm_ctrl_cmd ctrlcmd;
 	D("%s\n", __func__);
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd)); 
 	ctrlcmd.type	   = MSM_V4L2_STREAM_ON;
-	ctrlcmd.timeout_ms = 10000;
+	ctrlcmd.timeout_ms = 20000;
 	ctrlcmd.length	 = 0;
 	ctrlcmd.value    = NULL;
 	ctrlcmd.stream_type = pcam->dev_inst[idx]->image_mode;
@@ -568,7 +594,7 @@ static int msm_server_streamon(struct msm_cam_v4l2_device *pcam, int idx)
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	return rc;
@@ -580,11 +606,9 @@ static int msm_server_streamoff(struct msm_cam_v4l2_device *pcam, int idx)
 	struct msm_ctrl_cmd ctrlcmd;
 
 	D("%s, pcam = 0x%x\n", __func__, (u32)pcam);
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type        = MSM_V4L2_STREAM_OFF;
-	ctrlcmd.timeout_ms  = 10000;
+	ctrlcmd.timeout_ms  = 20000;
 	ctrlcmd.length      = 0;
 	ctrlcmd.value       = NULL;
 	ctrlcmd.stream_type = pcam->dev_inst[idx]->image_mode;
@@ -592,7 +616,7 @@ static int msm_server_streamoff(struct msm_cam_v4l2_device *pcam, int idx)
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	return rc;
@@ -643,20 +667,18 @@ static int msm_server_proc_ctrl_cmd(struct msm_cam_v4l2_device *pcam,
 	} else
 	tmp_cmd->value = NULL;
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type = MSM_V4L2_SET_CTRL_CMD;
 	ctrlcmd.length = cmd_len + value_len;
 	ctrlcmd.value = (void *)ctrl_data;
 	if (tmp_cmd->timeout_ms > 0)
 		ctrlcmd.timeout_ms = tmp_cmd->timeout_ms;
 	else
-		ctrlcmd.timeout_ms = 1000;
+		ctrlcmd.timeout_ms = 2000;
 	ctrlcmd.vnode_id = pcam->vnode_id;
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 	D("%s: msm_server_control rc=%d\n", __func__, rc);
 	if (rc == 0) {
@@ -703,19 +725,17 @@ static int msm_server_s_ctrl(struct msm_cam_v4l2_device *pcam,
 
 	memset(ctrl_data, 0, sizeof(ctrl_data));
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type = MSM_V4L2_SET_CTRL;
 	ctrlcmd.length = sizeof(struct v4l2_control);
 	ctrlcmd.value = (void *)ctrl_data;
 	memcpy(ctrlcmd.value, ctrl, ctrlcmd.length);
-	ctrlcmd.timeout_ms = 1000;
+	ctrlcmd.timeout_ms = 2000;
 	ctrlcmd.vnode_id = pcam->vnode_id;
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	return rc;
@@ -738,19 +758,17 @@ static int msm_server_g_ctrl(struct msm_cam_v4l2_device *pcam,
 
 	memset(ctrl_data, 0, sizeof(ctrl_data));
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type = MSM_V4L2_GET_CTRL;
 	ctrlcmd.length = sizeof(struct v4l2_control);
 	ctrlcmd.value = (void *)ctrl_data;
 	memcpy(ctrlcmd.value, ctrl, ctrlcmd.length);
-	ctrlcmd.timeout_ms = 1000;
+	ctrlcmd.timeout_ms = 2000;
 	ctrlcmd.vnode_id = pcam->vnode_id;
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in usersspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 
 	ctrl->value = ((struct v4l2_control *)ctrlcmd.value)->value;
@@ -768,19 +786,16 @@ static int msm_server_q_ctrl(struct msm_cam_v4l2_device *pcam,
 	WARN_ON(queryctrl == NULL);
 	memset(ctrl_data, 0, sizeof(ctrl_data));
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type = MSM_V4L2_QUERY_CTRL;
 	ctrlcmd.length = sizeof(struct v4l2_queryctrl);
 	ctrlcmd.value = (void *)ctrl_data;
 	memcpy(ctrlcmd.value, queryctrl, ctrlcmd.length);
-	ctrlcmd.timeout_ms = 1000;
+	ctrlcmd.timeout_ms = 2000;
 	ctrlcmd.vnode_id = pcam->vnode_id;
-	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in userspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 	D("%s: rc = %d\n", __func__, rc);
 
@@ -801,9 +816,6 @@ static int msm_server_get_fmt(struct msm_cam_v4l2_device *pcam,
 	pix->pixelformat  = pcam->dev_inst[idx]->vid_fmt.fmt.pix.pixelformat;
 	pix->bytesperline = pcam->dev_inst[idx]->vid_fmt.fmt.pix.bytesperline;
 	pix->colorspace   = pcam->dev_inst[idx]->vid_fmt.fmt.pix.colorspace;
-	if (pix->bytesperline < 0)
-		return pix->bytesperline;
-
 	pix->sizeimage    = pix->height * pix->bytesperline;
 
 	return 0;
@@ -830,7 +842,7 @@ static int msm_server_try_fmt(struct msm_cam_v4l2_device *pcam,
 		return -EINVAL;
 	}
 
-	/* check if the format is supported by this host-sensor combo */
+	
 	for (i = 0; i < pcam->num_fmts; i++) {
 		D("%s: usr_fmts.fourcc: 0x%x\n", __func__,
 			pcam->usr_fmts[i].fourcc);
@@ -859,7 +871,7 @@ static int msm_server_try_fmt_mplane(struct msm_cam_v4l2_device *pcam,
 		return -EINVAL;
 	}
 
-	/* check if the format is supported by this host-sensor combo */
+	
 	for (i = 0; i < pcam->num_fmts; i++) {
 		D("%s: usr_fmts.fourcc: 0x%x\n", __func__,
 			pcam->usr_fmts[i].fourcc);
@@ -883,30 +895,23 @@ static int msm_camera_get_crop(struct msm_cam_v4l2_device *pcam,
 
 	BUG_ON(crop == NULL);
 
-	/* HTC_START */
-	memset(&ctrlcmd, 0, sizeof(ctrlcmd));
-	/* HTC_END */
+	memset(&ctrlcmd, 0, sizeof(ctrlcmd));  
 	ctrlcmd.type = MSM_V4L2_GET_CROP;
 	ctrlcmd.length = sizeof(struct v4l2_crop);
 	ctrlcmd.value = (void *)crop;
-	ctrlcmd.timeout_ms = 1000;
+	ctrlcmd.timeout_ms = 2000;
 	ctrlcmd.vnode_id = pcam->vnode_id;
 	ctrlcmd.queue_idx = pcam->server_queue_idx;
 	ctrlcmd.stream_type = pcam->dev_inst[idx]->image_mode;
 	ctrlcmd.config_ident = g_server_dev.config_info.config_dev_id[0];
 
-	/* send command to config thread in userspace, and get return value */
+	
 	rc = msm_server_control(&g_server_dev, &ctrlcmd);
 	D("%s: rc = %d\n", __func__, rc);
 
 	return rc;
 }
 
-/*
- *
- * implementation of v4l2_ioctl_ops
- *
- */
 static int msm_camera_v4l2_querycap(struct file *f, void *pctx,
 				struct v4l2_capability *pcaps)
 {
@@ -914,8 +919,8 @@ static int msm_camera_v4l2_querycap(struct file *f, void *pctx,
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
 
-	/* some other day, some other time */
-	/*cap->version = LINUX_VERSION_CODE; */
+	
+	
 	pcaps->capabilities = V4L2_CAP_VIDEO_CAPTURE | V4L2_CAP_STREAMING;
 	return 0;
 }
@@ -1003,6 +1008,7 @@ static int msm_camera_v4l2_reqbufs(struct file *f, void *pctx,
 	WARN_ON(pctx != f->private_data);
 
 	mutex_lock(&pcam_inst->inst_lock);
+
 	rc = vb2_reqbufs(&pcam_inst->vid_bufq, pb);
 	if (rc < 0) {
 		pr_err("%s reqbufs failed %d ", __func__, rc);
@@ -1010,8 +1016,8 @@ static int msm_camera_v4l2_reqbufs(struct file *f, void *pctx,
 		return rc;
 	}
 	if (!pb->count) {
-		/* Deallocation. free buf_offset array */
-		D("%s Inst %p freeing buffer offsets array",
+		
+		pr_info("%s Inst %p freeing buffer offsets array",
 			__func__, pcam_inst);
 		for (j = 0 ; j < pcam_inst->buf_count ; j++) {
 			kfree(pcam_inst->buf_offset[j]);
@@ -1019,16 +1025,14 @@ static int msm_camera_v4l2_reqbufs(struct file *f, void *pctx,
 		}
 		kfree(pcam_inst->buf_offset);
 		pcam_inst->buf_offset = NULL;
-		/* If the userspace has deallocated all the
-		 * buffers, then release the vb2 queue */
 		if (pcam_inst->vbqueue_initialized) {
 			vb2_queue_release(&pcam_inst->vid_bufq);
 			pcam_inst->vbqueue_initialized = 0;
 		}
 	} else {
-		D("%s Inst %p Allocating buf_offset array",
+		pr_info("%s Inst %p Allocating buf_offset array",
 			__func__, pcam_inst);
-		/* Allocation. allocate buf_offset array */
+		
 		pcam_inst->buf_offset = (struct msm_cam_buf_offset **)
 			kzalloc(pb->count * sizeof(struct msm_cam_buf_offset *),
 							GFP_KERNEL);
@@ -1062,7 +1066,7 @@ static int msm_camera_v4l2_reqbufs(struct file *f, void *pctx,
 static int msm_camera_v4l2_querybuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
-	/* get the video device */
+	
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	int rc = 0;
 	pcam_inst = container_of(f->private_data,
@@ -1080,7 +1084,7 @@ static int msm_camera_v4l2_qbuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
 	int rc = 0, i = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
@@ -1090,6 +1094,7 @@ static int msm_camera_v4l2_qbuf(struct file *f, void *pctx,
 	WARN_ON(pctx != f->private_data);
 
 	mutex_lock(&pcam_inst->inst_lock);
+
 	if (!pcam_inst->buf_offset) {
 		pr_err("%s Buffer is already released. Returning. ", __func__);
 		mutex_unlock(&pcam_inst->inst_lock);
@@ -1097,7 +1102,7 @@ static int msm_camera_v4l2_qbuf(struct file *f, void *pctx,
 	}
 
 	if (pb->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
-		/* Reject the buffer if planes array was not allocated */
+		
 		if (pb->m.planes == NULL) {
 			pr_err("%s Planes array is null ", __func__);
 			mutex_unlock(&pcam_inst->inst_lock);
@@ -1121,7 +1126,6 @@ static int msm_camera_v4l2_qbuf(struct file *f, void *pctx,
 	rc = vb2_qbuf(&pcam_inst->vid_bufq, pb);
 	D("%s, videobuf_qbuf mode %d and idx %d returns %d\n", __func__,
 		pcam_inst->image_mode, pb->index, rc);
-
 	mutex_unlock(&pcam_inst->inst_lock);
 	return rc;
 }
@@ -1130,14 +1134,13 @@ static int msm_camera_v4l2_dqbuf(struct file *f, void *pctx,
 					struct v4l2_buffer *pb)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
 		struct msm_cam_v4l2_dev_inst, eventHandle);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
-
 	mutex_lock(&pcam_inst->inst_lock);
 	if (pcam_inst->streamon == 0) {
 		mutex_unlock(&pcam_inst->inst_lock);
@@ -1146,8 +1149,8 @@ static int msm_camera_v4l2_dqbuf(struct file *f, void *pctx,
 
 	rc = vb2_dqbuf(&pcam_inst->vid_bufq, pb,  f->f_flags & O_NONBLOCK);
 	D("%s, videobuf_dqbuf returns %d\n", __func__, rc);
-
 	mutex_unlock(&pcam_inst->inst_lock);
+
 	return rc;
 }
 
@@ -1155,7 +1158,7 @@ static int msm_camera_v4l2_streamon(struct file *f, void *pctx,
 					enum v4l2_buf_type buf_type)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1163,9 +1166,9 @@ static int msm_camera_v4l2_streamon(struct file *f, void *pctx,
 
 	D("%s Inst %p\n", __func__, pcam_inst);
 	WARN_ON(pctx != f->private_data);
-
 	mutex_lock(&pcam->vid_lock);
 	mutex_lock(&pcam_inst->inst_lock);
+
 	if ((buf_type != V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) &&
 		(buf_type != V4L2_BUF_TYPE_VIDEO_CAPTURE)) {
 		pr_err("%s Invalid buffer type ", __func__);
@@ -1175,21 +1178,13 @@ static int msm_camera_v4l2_streamon(struct file *f, void *pctx,
 	}
 
 	D("%s Calling videobuf_streamon", __func__);
-	/* if HW streaming on is successful, start buffer streaming */
+	
 	rc = vb2_streamon(&pcam_inst->vid_bufq, buf_type);
 	D("%s, videobuf_streamon returns %d\n", __func__, rc);
 
-	/* turn HW (VFE/sensor) streaming */
+	
 	pcam_inst->streamon = 1;
 	rc = msm_server_streamon(pcam, pcam_inst->my_index);
-/* HTC_START Angie 20120807 */
-	if (rc < 0) {
-		pr_err("msm_server_streamon failed %p\n", &pcam_inst->vid_bufq);
-		pcam_inst->streamon = 0;
-		/* stop buffer streaming */
-		vb2_streamoff(&pcam_inst->vid_bufq, buf_type);
-	}
-/* HTC_END */
 	mutex_unlock(&pcam_inst->inst_lock);
 	mutex_unlock(&pcam->vid_lock);
 	D("%s rc = %d\n", __func__, rc);
@@ -1200,7 +1195,7 @@ static int msm_camera_v4l2_streamoff(struct file *f, void *pctx,
 					enum v4l2_buf_type buf_type)
 {
 	int rc = 0;
-	/* get the camera device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1215,8 +1210,6 @@ static int msm_camera_v4l2_streamoff(struct file *f, void *pctx,
 		return -EINVAL;
 	}
 
-	/* first turn of HW (VFE/sensor) streaming so that buffers are
-		not in use when we free the buffers */
 	mutex_lock(&pcam->vid_lock);
 	mutex_lock(&pcam_inst->inst_lock);
 	pcam_inst->streamon = 0;
@@ -1225,18 +1218,19 @@ static int msm_camera_v4l2_streamoff(struct file *f, void *pctx,
 	if (rc < 0)
 		pr_err("%s: hw failed to stop streaming\n", __func__);
 
-	/* stop buffer streaming */
+	
 	rc = vb2_streamoff(&pcam_inst->vid_bufq, buf_type);
 	D("%s, videobuf_streamoff returns %d\n", __func__, rc);
 	mutex_unlock(&pcam_inst->inst_lock);
 	mutex_unlock(&pcam->vid_lock);
+
 	return rc;
 }
 
 static int msm_camera_v4l2_enum_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_fmtdesc *pfmtdesc)
 {
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	const struct msm_isp_color_fmt *isp_fmt;
 
@@ -1266,7 +1260,7 @@ static int msm_camera_v4l2_g_fmt_cap(struct file *f,
 		void *pctx, struct v4l2_format *pfmt)
 {
 	int rc = 0;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1288,7 +1282,7 @@ static int msm_camera_v4l2_g_fmt_cap_mplane(struct file *f,
 		void *pctx, struct v4l2_format *pfmt)
 {
 	int rc = 0;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	pcam_inst = container_of(f->private_data,
@@ -1306,26 +1300,23 @@ static int msm_camera_v4l2_g_fmt_cap_mplane(struct file *f,
 	return rc;
 }
 
-/* This function will readjust the format parameters based in HW
-  capabilities. Called by s_fmt_cap
-*/
 static int msm_camera_v4l2_try_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_format *pfmt)
 {
 	int rc = 0;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
-
 	mutex_lock(&pcam->vid_lock);
+
 	rc = msm_server_try_fmt(pcam, pfmt);
 	if (rc)
 		pr_err("Format %x not found, rc = %d\n",
 				pfmt->fmt.pix.pixelformat, rc);
-
 	mutex_unlock(&pcam->vid_lock);
+
 	return rc;
 }
 
@@ -1333,30 +1324,26 @@ static int msm_camera_v4l2_try_fmt_cap_mplane(struct file *f, void *pctx,
 					struct v4l2_format *pfmt)
 {
 	int rc = 0;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 
 	D("%s\n", __func__);
 	WARN_ON(pctx != f->private_data);
-
 	mutex_lock(&pcam->vid_lock);
+
 	rc = msm_server_try_fmt_mplane(pcam, pfmt);
 	if (rc)
 		pr_err("Format %x not found, rc = %d\n",
 				pfmt->fmt.pix_mp.pixelformat, rc);
-
 	mutex_unlock(&pcam->vid_lock);
 	return rc;
 }
 
-/* This function will reconfig the v4l2 driver and HW device, it should be
-   called after the streaming is stopped.
-*/
 static int msm_camera_v4l2_s_fmt_cap(struct file *f, void *pctx,
 					struct v4l2_format *pfmt)
 {
 	int rc;
-	/* get the video device */
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_media_controller *pmctl;
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
@@ -1380,6 +1367,7 @@ static int msm_camera_v4l2_s_fmt_cap(struct file *f, void *pctx,
 	}
 
 	mutex_lock(&pcam->vid_lock);
+
 	rc = msm_server_set_fmt(pcam, pcam_inst->my_index, pfmt);
 	if (rc < 0) {
 		pr_err("%s: msm_server_set_fmt Error: %d\n",
@@ -1472,7 +1460,6 @@ static int msm_camera_v4l2_s_crop(struct file *f, void *pctx,
 	return rc;
 }
 
-/* Stream type-dependent parameter ioctls */
 static int msm_camera_v4l2_g_parm(struct file *f, void *pctx,
 				struct v4l2_streamparm *a)
 {
@@ -1505,7 +1492,7 @@ static int msm_camera_v4l2_s_parm(struct file *f, void *pctx,
 	pcam_inst->image_mode = a->parm.capture.extendedmode;
 	pcam_inst->pcam->dev_inst_map[pcam_inst->image_mode] = pcam_inst;
 	pcam_inst->path = msm_vidbuf_get_path(pcam_inst->image_mode);
-	D("%spath=%d,rc=%d\n", __func__,
+	pr_info("%spath=%d,rc=%d\n", __func__,
 		pcam_inst->path, rc);
 	return rc;
 }
@@ -1556,7 +1543,7 @@ static int msm_server_v4l2_subscribe_event(struct v4l2_fh *fh,
 
 	D("%s: fh = 0x%x, type = 0x%x", __func__, (u32)fh, sub->type);
 	if (sub->type == V4L2_EVENT_ALL) {
-		/*sub->type = MSM_ISP_EVENT_START;*/
+		
 		sub->type = V4L2_EVENT_PRIVATE_START + MSM_CAM_RESP_CTRL;
 		D("sub->type start = 0x%x\n", sub->type);
 		do {
@@ -1564,7 +1551,7 @@ static int msm_server_v4l2_subscribe_event(struct v4l2_fh *fh,
 			if (rc < 0) {
 				D("%s: failed for evtType = 0x%x, rc = %d\n",
 						__func__, sub->type, rc);
-			/* unsubscribe all events here and return */
+			
 			sub->type = V4L2_EVENT_ALL;
 			v4l2_event_unsubscribe(fh, sub);
 			return rc;
@@ -1598,7 +1585,6 @@ static int msm_server_v4l2_unsubscribe_event(struct v4l2_fh *fh,
 	return rc;
 }
 
-/* v4l2_ioctl_ops */
 static const struct v4l2_ioctl_ops g_msm_ioctl_ops = {
 	.vidioc_querycap = msm_camera_v4l2_querycap,
 
@@ -1617,7 +1603,7 @@ static const struct v4l2_ioctl_ops g_msm_ioctl_ops = {
 	.vidioc_streamon = msm_camera_v4l2_streamon,
 	.vidioc_streamoff = msm_camera_v4l2_streamoff,
 
-	/* format ioctls */
+	
 	.vidioc_enum_fmt_vid_cap = msm_camera_v4l2_enum_fmt_cap,
 	.vidioc_enum_fmt_vid_cap_mplane = msm_camera_v4l2_enum_fmt_cap,
 	.vidioc_try_fmt_vid_cap = msm_camera_v4l2_try_fmt_cap,
@@ -1630,22 +1616,20 @@ static const struct v4l2_ioctl_ops g_msm_ioctl_ops = {
 	.vidioc_g_jpegcomp = msm_camera_v4l2_g_jpegcomp,
 	.vidioc_s_jpegcomp = msm_camera_v4l2_s_jpegcomp,
 
-	/* Stream type-dependent parameter ioctls */
+	
 	.vidioc_g_parm =  msm_camera_v4l2_g_parm,
 	.vidioc_s_parm =  msm_camera_v4l2_s_parm,
 
-	/* event subscribe/unsubscribe */
+	
 	.vidioc_subscribe_event = msm_camera_v4l2_subscribe_event,
 	.vidioc_unsubscribe_event = msm_camera_v4l2_unsubscribe_event,
 };
 
-/* open an active camera session to manage the streaming logic */
 static int msm_cam_server_open_session(struct msm_cam_server_dev *ps,
 	struct msm_cam_v4l2_device *pcam)
 {
 	int rc = 0;
 	struct msm_cam_media_controller *pmctl;
-
 	D("%s\n", __func__);
 
 	if (!ps || !pcam) {
@@ -1653,46 +1637,33 @@ static int msm_cam_server_open_session(struct msm_cam_server_dev *ps,
 		return rc;
 	}
 
-	/* The number of camera instance should be controlled by the
-		resource manager. Currently supporting one active instance
-		until multiple instances are supported */
 	if (atomic_read(&ps->number_pcam_active) > 0) {
 		pr_err("%s Cannot have more than one active camera %d\n",
 			__func__, atomic_read(&ps->number_pcam_active));
 		return -EINVAL;
 	}
-	/* book keeping this camera session*/
+	
 	ps->pcam_active = pcam;
 	atomic_inc(&ps->number_pcam_active);
 
 	D("config pcam = 0x%p\n", ps->pcam_active);
 
-	/* initialization the media controller module*/
+	
 	msm_mctl_init(pcam);
 
-	/*for single VFE msms (8660, 8960v1), just populate the session
-	with our VFE devices that registered*/
 	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
-	/* HTC_START (klockwork issue)*/
-	if(!pmctl)
-	{
-		pr_err(" %s error when pmctl = msm_camera_get_mctl(pcam->mctl_handle) \n", __func__);
-		return -EINVAL;
-	}
-	/* HTC_END */
+	if(!pmctl) return -EINVAL;
 	pmctl->axi_sdev = ps->axi_device[0];
 	pmctl->isp_sdev = ps->isp_subdev[0];
 
-/* HTC_START chris 20120706 */
 #ifdef CONFIG_PERFLOCK
 	pmctl->cam_perf_lock = &ps->cam_perf_lock;
 #endif
-/* HTC_END */
 
 	return rc;
+
 }
 
-/* close an active camera session to server */
 static int msm_cam_server_close_session(struct msm_cam_server_dev *ps,
 	struct msm_cam_v4l2_device *pcam)
 {
@@ -1707,10 +1678,11 @@ static int msm_cam_server_close_session(struct msm_cam_server_dev *ps,
 
 	atomic_dec(&ps->number_pcam_active);
 	ps->pcam_active = NULL;
-
 	msm_mctl_free(pcam);
+
 	return rc;
 }
+
 
 int msm_server_open_client(int *p_qidx)
 {
@@ -1773,7 +1745,7 @@ int msm_server_send_ctrl(struct msm_ctrl_cmd *out,
 		server_dev->server_evt_id;
 	v4l2_evt.type = V4L2_EVENT_PRIVATE_START + ctrl_id;
 	v4l2_evt.u.data[0] = out->queue_idx;
-	/* setup event object to transfer the command; */
+	
 	isp_event->resptype = MSM_CAM_RESP_V4L2;
 	isp_event->isp_data.ctrl = *out;
 	isp_event->isp_data.ctrl.evt_id = server_dev->server_evt_id;
@@ -1784,14 +1756,12 @@ int msm_server_send_ctrl(struct msm_ctrl_cmd *out,
 	msm_enqueue(&server_dev->server_queue[out->queue_idx].eventData_q,
 				&event_qcmd->list_eventdata);
 
-	/* now send command to config thread in userspace,
-	 * and wait for results */
 	v4l2_event_queue(server_dev->server_command_queue.pvdev,
 					  &v4l2_evt);
 	D("%s v4l2_event_queue: type = 0x%x\n", __func__, v4l2_evt.type);
 	mutex_unlock(&server_dev->server_queue_lock);
 
-	/* wait for config return status */
+	
 	D("Waiting for config status\n");
 	rc = wait_event_interruptible_timeout(queue->wait,
 		!list_empty_careful(&queue->list),
@@ -1809,14 +1779,9 @@ int msm_server_send_ctrl(struct msm_ctrl_cmd *out,
 
 	rcmd = msm_dequeue(queue, list_control);
 	BUG_ON(!rcmd);
-	/* HTC_START (klockwork issue)*/
-	if(!rcmd)
-	{
-		pr_err(" %s error when rcmd = msm_dequeue(queue, list_control)\n", __func__);
-		return -EINVAL;
-	}
-	/* HTC_END */
+	if(!rcmd) return -EINVAL;
 	D("%s Finished servicing ioctl\n", __func__);
+
 	ctrlcmd = (struct msm_ctrl_cmd *)(rcmd->command);
 	value = out->value;
 	if (ctrlcmd->length > 0)
@@ -1826,12 +1791,13 @@ int msm_server_send_ctrl(struct msm_ctrl_cmd *out,
 	out->value = value;
 
 	kfree(ctrlcmd);
+
 	free_qcmd(rcmd);
 	kfree(isp_event);
 	D("%s: rc %d\n", __func__, rc);
-	/* rc is the time elapsed. */
+	
 	if (rc >= 0) {
-		/* TODO: Refactor msm_ctrl_cmd::status field */
+		
 		if (out->status == 0)
 			rc = -1;
 		else if (out->status == 1 || out->status == 4)
@@ -1856,7 +1822,7 @@ int msm_server_close_client(int idx)
 	mutex_unlock(&g_server_dev.server_lock);
 	return rc;
 }
-/* v4l2_file_operations */
+
 static int msm_open(struct file *f)
 {
 	int i;
@@ -1865,13 +1831,13 @@ static int msm_open(struct file *f)
 	int ion_client_created = 0;
 #endif
 	int server_q_idx = 0;
-	/*struct msm_isp_ops *p_isp = 0;*/
-	/* get the video device */
+
+	
+	
 	struct msm_cam_v4l2_device *pcam  = video_drvdata(f);
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	struct msm_cam_media_controller *pmctl = NULL;
 	struct msm_cam_server_queue *queue = NULL;
-
 	D("%s\n", __func__);
 
 	if (!pcam) {
@@ -1892,7 +1858,7 @@ static int msm_open(struct file *f)
 	if (server_q_idx < 0)
 		return server_q_idx;
 
-	/* if no instance is available, return error */
+	
 	if (i == MSM_DEV_INST_MAX) {
 		mutex_unlock(&pcam->vid_lock);
 		return rc;
@@ -1915,6 +1881,16 @@ static int msm_open(struct file *f)
 	D("%s use_count %d\n", __func__, pcam->use_count);
 	if (pcam->use_count == 1) {
 		int ges_evt = MSM_V4L2_GES_CAM_OPEN;
+
+		pr_info("%s use_count %d\n", __func__, pcam->use_count); 
+
+		
+		if (atomic_read(&g_server_dev.number_pcam_active) > 0) {
+			pr_err("%s: Cannot have more than one active camera\n", __func__);
+			rc = -EINVAL;
+			goto more_than_one_active_cam_error;
+		}
+		
 		pcam->server_queue_idx = server_q_idx;
 		queue = &g_server_dev.server_queue[server_q_idx];
 		queue->ctrl_data = kzalloc(sizeof(uint8_t) *
@@ -1926,6 +1902,7 @@ static int msm_open(struct file *f)
 		msm_cam_server_subdev_notify(g_server_dev.gesture_device,
 			NOTIFY_GESTURE_CAM_EVT, &ges_evt);
 
+
 		rc = msm_cam_server_open_session(&g_server_dev, pcam);
 		if (rc < 0) {
 			pr_err("%s: cam_server_open_session failed %d\n",
@@ -1934,30 +1911,31 @@ static int msm_open(struct file *f)
 		}
 
 		pmctl = msm_camera_get_mctl(pcam->mctl_handle);
-
-		/* HTC_START (klockwork issue)*/
-		if(!pmctl)
-		{
-			pr_err(" %s error when pmctl = msm_camera_get_mctl(pcam->mctl_handle)\n", __func__);
-			goto mctl_open_failed;
+		if (!pmctl)  {
+			rc = -EINVAL;
+			goto msm_cam_server_open_session_failed;
 		}
-		/* HTC_END */
+
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
-		pmctl->client = msm_ion_client_create(-1, "camera");
+		{
+			char ion_debug_name[64];
+			snprintf(ion_debug_name, 64, "%u", task_pid_nr(current->group_leader));
+			pmctl->client = msm_ion_client_create(-1, ion_debug_name);
+		}
 		kref_init(&pmctl->refcount);
 		ion_client_created = 1;
 #endif
-
-		/* Should be set to sensor ops if any but right now its OK!! */
+		
 		if (!pmctl->mctl_open) {
 			D("%s: media contoller is not inited\n", __func__);
 			rc = -ENODEV;
 			goto mctl_open_failed;
 		}
 
-		/* Now we really have to activate the camera */
+		
 		D("%s: call mctl_open\n", __func__);
 		rc = pmctl->mctl_open(pmctl, MSM_APPS_ID_V4L2);
+
 		if (rc < 0) {
 			pr_err("%s: HW open failed rc = 0x%x\n",  __func__, rc);
 			goto mctl_open_failed;
@@ -1980,6 +1958,7 @@ static int msm_open(struct file *f)
 	D("f->private_data = 0x%x, pcam = 0x%x\n",
 		(u32)f->private_data, (u32)pcam_inst);
 
+
 	if (pcam->use_count == 1) {
 		rc = msm_send_open_server(pcam);
 		if (rc < 0 && rc != -ERESTARTSYS) {
@@ -1991,7 +1970,7 @@ static int msm_open(struct file *f)
 	mutex_unlock(&pcam->vid_lock);
 	D("%s: end\n", __func__);
 	return rc;
-
+	
 msm_send_open_server_failed:
 	v4l2_fh_del(&pcam_inst->eventHandle);
 	v4l2_fh_exit(&pcam_inst->eventHandle);
@@ -2000,6 +1979,7 @@ mctl_event_q_setup_failed:
 		if (pmctl->mctl_release(pmctl) < 0)
 			pr_err("%s: mctl_release failed\n", __func__);
 mctl_open_failed:
+
 	if (pcam->use_count == 1) {
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 		if (ion_client_created) {
@@ -2013,7 +1993,7 @@ mctl_open_failed:
 	}
 msm_cam_server_open_session_failed:
 	if (pcam->use_count == 1) {
-		if (queue != NULL) {
+		if (queue) {
 			queue->queue_active = 0;
 			msm_drain_eventq(&queue->eventData_q);
 			kfree(queue->ctrl_data);
@@ -2022,9 +2002,11 @@ msm_cam_server_open_session_failed:
 			msm_drain_eventq(&queue->eventData_q);
 			queue = NULL;
 		}
+
 		pcam->dev_inst[i] = NULL;
 		pcam->use_count = 0;
 	}
+more_than_one_active_cam_error:
 	pcam->dev_inst[i] = NULL;
 	mutex_unlock(&pcam->vid_lock);
 	kfree(pcam_inst);
@@ -2065,10 +2047,10 @@ int msm_cam_server_open_mctl_session(struct msm_cam_v4l2_device *pcam,
 {
 	int rc = 0;
 	struct msm_cam_media_controller *pmctl = NULL;
-	D("%s: %p", __func__, g_server_dev.pcam_active);
+	pr_info("%s: %p", __func__, g_server_dev.pcam_active);
 	*p_active = 0;
 	if (g_server_dev.pcam_active) {
-		D("%s: Active camera present return", __func__);
+		pr_info("%s: Active camera present return", __func__);
 		return 0;
 	}
 	rc = msm_cam_server_open_session(&g_server_dev, pcam);
@@ -2079,14 +2061,15 @@ int msm_cam_server_open_mctl_session(struct msm_cam_v4l2_device *pcam,
 	}
 
 	pmctl = msm_camera_get_mctl(pcam->mctl_handle);
-	/* Should be set to sensor ops if any but right now its OK!! */
-	/* HTC_START (klockwork issue)*/
-	if(!pmctl)
-	{
-		pr_err(" %s error when pmctl = msm_camera_get_mctl(pcam->mctl_handle)\n", __func__);
-		return -EINVAL;
+	
+	if (!pmctl) {
+		pr_err("%s: pmctl is NULL\n",
+			 __func__);
+		rc = -ENODEV;
+		return rc;
 	}
-	/* HTC_END */
+	
+	
 	if (!pmctl->mctl_open) {
 		D("%s: media contoller is not inited\n",
 			 __func__);
@@ -2102,7 +2085,7 @@ int msm_cam_server_open_mctl_session(struct msm_cam_v4l2_device *pcam,
 		return rc;
 	}
 	pmctl->pcam_ptr = pcam;
-	*p_active = 1;
+	*p_active = 1;	
 	return rc;
 }
 
@@ -2175,12 +2158,14 @@ void msm_release_ion_client(struct kref *ref)
 	struct msm_cam_media_controller *mctl = container_of(ref,
 		struct msm_cam_media_controller, refcount);
 	pr_info("%s Calling ion_client_destroy\n", __func__);
-	ion_client_destroy(mctl->client);
+
+	if (mctl)
+		ion_client_destroy(mctl->client);
 }
 
 static int msm_close(struct file *f)
 {
-	int rc = 0;
+	int rc = 0,i=0;
 	struct msm_cam_v4l2_device *pcam;
 	struct msm_cam_v4l2_dev_inst *pcam_inst;
 	struct msm_cam_server_queue *queue;
@@ -2199,28 +2184,43 @@ static int msm_close(struct file *f)
 		return -EINVAL;
 	}
 
+
 	mutex_lock(&pcam->vid_lock);
 	mutex_lock(&pcam_inst->inst_lock);
 
 	if (pcam_inst->streamon) {
-		/*something went wrong since instance
-		is closing without streamoff*/
+	
+	#if 0
 		if (pmctl->mctl_release) {
 			rc = pmctl->mctl_release(pmctl);
 			if (rc < 0)
 				pr_err("mctl_release fails %d\n", rc);
 		}
-		pmctl->mctl_release = NULL;/*so that it isn't closed again*/
+		pmctl->mctl_release = NULL;
+	#endif
+	
+		msm_cam_stop_hardware(pcam);
 	}
 
 	pcam_inst->streamon = 0;
 	pcam->use_count--;
 	pcam->dev_inst_map[pcam_inst->image_mode] = NULL;
+
+	
+	pr_info("%s Inst %p freeing buffer offsets array",__func__, pcam_inst);
+	if (pcam_inst->buf_offset) {
+		for (i = 0 ; i < pcam_inst->buf_count ; i++)
+			kfree(pcam_inst->buf_offset[i]);
+		kfree(pcam_inst->buf_offset);
+		pcam_inst->buf_offset = NULL;
+	}
+	
 	if (pcam_inst->vbqueue_initialized)
 		vb2_queue_release(&pcam_inst->vid_bufq);
-	D("%s Closing down instance %p ", __func__, pcam_inst);
+	pr_info("%s Closing down instance %p, [%d, %d]", __func__, pcam_inst, pcam->use_count , g_server_dev.use_count);
 	D("%s index %d nodeid %d count %d\n", __func__, pcam_inst->my_index,
-		pcam->vnode_id, pcam->use_count);
+	pcam->vnode_id, pcam->use_count);
+
 	pcam->dev_inst[pcam_inst->my_index] = NULL;
 	if (pcam_inst->my_index == 0) {
 		v4l2_fh_del(&pcam_inst->eventHandle);
@@ -2233,29 +2233,38 @@ static int msm_close(struct file *f)
 
 	if (pcam->use_count == 0) {
 		int ges_evt = MSM_V4L2_GES_CAM_CLOSE;
+		
+		struct msm_sensor_ctrl_t *s_ctrl = get_sctrl(pmctl->sensor_sdev);
+		if(s_ctrl && s_ctrl->sensor_first_mutex)  {
+			mutex_lock(s_ctrl->sensor_first_mutex);
+			mutex_unlock(s_ctrl->sensor_first_mutex);
+		}
+
 		if (g_server_dev.use_count > 0) {
 			rc = msm_send_close_server(pcam);
 			if (rc < 0)
 				pr_err("msm_send_close_server failed %d\n", rc);
 		}
-
 		if (pmctl->mctl_release) {
 			rc = pmctl->mctl_release(pmctl);
 			if (rc < 0)
 				pr_err("mctl_release fails %d\n", rc);
 		}
-
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 		kref_put(&pmctl->refcount, msm_release_ion_client);
 #endif
 		mutex_lock(&g_server_dev.server_queue_lock);
 		queue = &g_server_dev.server_queue[pcam->server_queue_idx];
-		queue->queue_active = 0;
-		kfree(queue->ctrl_data);
-		queue->ctrl_data = NULL;
-		msm_queue_drain(&queue->ctrl_q, list_control);
-		msm_drain_eventq(&queue->eventData_q);
+		if (queue) {
+			queue->queue_active = 0;
+			if(queue->ctrl_data)  kfree(queue->ctrl_data);
+			queue->ctrl_data = NULL;
+			msm_queue_drain(&queue->ctrl_q, list_control);
+			msm_drain_eventq(&queue->eventData_q);
+			
+		}
 		mutex_unlock(&g_server_dev.server_queue_lock);
+
 		rc = msm_cam_server_close_session(&g_server_dev, pcam);
 		if (rc < 0)
 			pr_err("msm_cam_server_close_session fails %d\n", rc);
@@ -2365,7 +2374,6 @@ static long msm_ioctl_server(struct file *file, void *fh,
 		if (copy_from_user(&temp_config_info,
 				(void __user *)ioctl_ptr->ioctl_ptr,
 				sizeof(struct msm_cam_config_dev_info))) {
-
 			rc = -EINVAL;
 			return rc;
 		}
@@ -2396,6 +2404,7 @@ static long msm_ioctl_server(struct file *file, void *fh,
 			rc = -EINVAL;
 			return rc;
 		}
+
 		for (i = 0; i < g_server_dev.mctl_node_info.num_mctl_nodes;
 				i++) {
 			if (copy_to_user((void __user *)
@@ -2427,6 +2436,7 @@ static long msm_ioctl_server(struct file *file, void *fh,
 		struct msm_queue_cmd *event_cmd;
 		struct msm_isp_event_ctrl u_isp_event;
 		struct msm_isp_event_ctrl *k_isp_event;
+
 		struct msm_device_queue *queue;
 		void __user *u_ctrl_value = NULL;
 		if (copy_from_user(&u_isp_event,
@@ -2434,6 +2444,7 @@ static long msm_ioctl_server(struct file *file, void *fh,
 			sizeof(struct msm_isp_event_ctrl))) {
 			rc = -EINVAL;
 			return rc;
+
 		}
 		mutex_lock(&g_server_dev.server_queue_lock);
 		if (!g_server_dev.server_queue
@@ -2442,7 +2453,7 @@ static long msm_ioctl_server(struct file *file, void *fh,
 			mutex_unlock(&g_server_dev.server_queue_lock);
 			rc = -EINVAL;
 			return rc;
-		}
+		}		
 		queue = &g_server_dev.server_queue
 			[u_isp_event.isp_data.ctrl.queue_idx].eventData_q;
 		event_cmd = msm_dequeue(queue, list_eventdata);
@@ -2451,22 +2462,21 @@ static long msm_ioctl_server(struct file *file, void *fh,
 			rc = -EINVAL;
 			mutex_unlock(&g_server_dev.server_queue_lock);
 			return rc;
+
 		}
 		k_isp_event = (struct msm_isp_event_ctrl *)
 				event_cmd->command;
 		free_qcmd(event_cmd);
 
-		/* Save the pointer of the user allocated command buffer*/
+		
 		u_ctrl_value = u_isp_event.isp_data.ctrl.value;
 
-		/* Copy the event structure into user struct*/
+		
 		u_isp_event = *k_isp_event;
 
-		/* Restore the saved pointer of the user
-		 * allocated command buffer. */
 		u_isp_event.isp_data.ctrl.value = u_ctrl_value;
 
-		/* Copy the ctrl cmd, if present*/
+		
 		if (k_isp_event->isp_data.ctrl.length > 0 &&
 			k_isp_event->isp_data.ctrl.value != NULL) {
 			void *k_ctrl_value =
@@ -2481,6 +2491,7 @@ static long msm_ioctl_server(struct file *file, void *fh,
 			}
 			kfree(k_isp_event->isp_data.ctrl.value);
 		}
+
 		if (copy_to_user((void __user *)ioctl_ptr->ioctl_ptr,
 							  &u_isp_event,
 				sizeof(struct msm_isp_event_ctrl))) {
@@ -2491,18 +2502,43 @@ static long msm_ioctl_server(struct file *file, void *fh,
 		}
 		kfree(k_isp_event);
 		mutex_unlock(&g_server_dev.server_queue_lock);
+	
 		rc = 0;
 		break;
 	}
-
+	
 	case MSM_CAM_IOCTL_SEND_EVENT:
 		rc = msm_server_send_v4l2_evt(arg);
 		break;
 
 	default:
+	
 		pr_err("%s: Invalid IOCTL = %d", __func__, cmd);
 		break;
 	}
+	return rc;
+}
+static long msm_server_send_v4l2_evt(void *evt)
+{
+	struct v4l2_event *v4l2_ev = (struct v4l2_event *)evt;
+	int rc = 0;
+
+	if (NULL == evt) {
+		pr_err("%s: evt is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	D("%s: evt type 0x%x\n", __func__, v4l2_ev->type);
+	if ((v4l2_ev->type >= MSM_GES_APP_EVT_MIN) &&
+		(v4l2_ev->type < MSM_GES_APP_EVT_MAX)) {
+		msm_cam_server_subdev_notify(g_server_dev.gesture_device,
+			NOTIFY_GESTURE_EVT, v4l2_ev);
+	} else {
+		pr_err("%s: Invalid evt %d\n", __func__, v4l2_ev->type);
+		rc = -EINVAL;
+	}
+	D("%s: end\n", __func__);
+
 	return rc;
 }
 
@@ -2511,6 +2547,7 @@ static int msm_open_server(struct file *fp)
 	int rc = 0;
 	D("%s: open %s\n", __func__, fp->f_path.dentry->d_name.name);
 	mutex_lock(&g_server_dev.server_lock);
+	
 	g_server_dev.use_count++;
 	if (g_server_dev.use_count == 1)
 		fp->private_data =
@@ -2539,7 +2576,9 @@ static unsigned int msm_poll_config(struct file *fp,
 static int msm_close_server(struct file *fp)
 {
 	struct v4l2_event_subscription sub;
+
 	D("%s\n", __func__);
+
 	mutex_lock(&g_server_dev.server_lock);
 	if (g_server_dev.use_count > 0)
 		g_server_dev.use_count--;
@@ -2548,21 +2587,9 @@ static int msm_close_server(struct file *fp)
 		mutex_lock(&g_server_dev.server_lock);
 		if (g_server_dev.pcam_active) {
 			struct v4l2_event v4l2_ev;
-			struct msm_cam_media_controller *pmctl = NULL;
-			int rc;
+			
+			msm_cam_stop_hardware(g_server_dev.pcam_active);
 
-			pmctl = msm_camera_get_mctl(
-				g_server_dev.pcam_active->mctl_handle);
-			if (pmctl && pmctl->mctl_release) {
-				rc = pmctl->mctl_release(pmctl);
-				if (rc < 0)
-					pr_err("mctl_release fails %d\n", rc);
-			}
-			/*so that it isn't closed again*/
-            /* HTC_START (klocwork issue)*/
-            if (pmctl != NULL)
-			    pmctl->mctl_release = NULL;
-            /* HTC_END */
 
 			v4l2_ev.type = V4L2_EVENT_PRIVATE_START
 				+ MSM_CAM_APP_NOTIFY_ERROR_EVENT;
@@ -2570,6 +2597,7 @@ static int msm_close_server(struct file *fp)
 			v4l2_event_queue(
 				g_server_dev.pcam_active->pvdev, &v4l2_ev);
 		}
+		
 		sub.type = V4L2_EVENT_ALL;
 		msm_server_v4l2_unsubscribe_event(
 			&g_server_dev.server_command_queue.eventHandle, &sub);
@@ -2578,29 +2606,6 @@ static int msm_close_server(struct file *fp)
 	return 0;
 }
 
-static long msm_server_send_v4l2_evt(void *evt)
-{
-	struct v4l2_event *v4l2_ev = (struct v4l2_event *)evt;
-	int rc = 0;
-
-	if (NULL == evt) {
-		pr_err("%s: evt is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	D("%s: evt type 0x%x\n", __func__, v4l2_ev->type);
-	if ((v4l2_ev->type >= MSM_GES_APP_EVT_MIN) &&
-		(v4l2_ev->type < MSM_GES_APP_EVT_MAX)) {
-		msm_cam_server_subdev_notify(g_server_dev.gesture_device,
-			NOTIFY_GESTURE_EVT, v4l2_ev);
-	} else {
-		pr_err("%s: Invalid evt %d\n", __func__, v4l2_ev->type);
-		rc = -EINVAL;
-	}
-	D("%s: end\n", __func__);
-
-	return rc;
-}
 
 static long msm_v4l2_evt_notify(struct msm_cam_media_controller *mctl,
 		unsigned int cmd, unsigned long evt)
@@ -2637,7 +2642,7 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 	D("%s: cmd %d\n", __func__, _IOC_NR(cmd));
 
 	switch (cmd) {
-	/* memory management shall be handeld here*/
+	
 	case MSM_CAM_IOCTL_REGISTER_PMEM:
 		return msm_register_pmem(
 			&config_cam->p_mctl->stats_info.pmem_stats_list,
@@ -2649,7 +2654,6 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 			&config_cam->p_mctl->stats_info.pmem_stats_list,
 			(void __user *)arg, config_cam->p_mctl->client);
 		break;
-
 	case VIDIOC_SUBSCRIBE_EVENT:
 		if (copy_from_user(&temp_sub,
 			(void __user *)arg,
@@ -2669,7 +2673,7 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 
 	case VIDIOC_UNSUBSCRIBE_EVENT:
 		if (copy_from_user(&temp_sub, (void __user *)arg,
-			sizeof(struct v4l2_event_subscription))) {
+			  sizeof(struct v4l2_event_subscription))) {
 			rc = -EINVAL;
 			return rc;
 		}
@@ -2679,7 +2683,6 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 		if (rc < 0) {
 			pr_err("%s: server_unsubscribe_event failed rc=%d\n",
 				__func__, rc);
-			return rc;
 		}
 		break;
 
@@ -2688,25 +2691,23 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 		struct msm_isp_event_ctrl u_isp_event;
 		struct msm_isp_event_ctrl *k_isp_event;
 
-		/* First, copy the v4l2 event structure from userspace */
+		
 		D("%s: VIDIOC_DQEVENT\n", __func__);
 		if (copy_from_user(&ev, (void __user *)arg,
 				sizeof(struct v4l2_event)))
 			break;
-		/* Next, get the pointer to event_ctrl structure
-		 * embedded inside the v4l2_event.u.data array. */
 		user_ptr = (void __user *)(*((uint32_t *)ev.u.data));
 
-		/* Next, copy the userspace event ctrl structure */
+		
 		if (copy_from_user((void *)&u_isp_event, user_ptr,
 				   sizeof(struct msm_isp_event_ctrl))) {
 			rc = -EFAULT;
 			break;
 		}
-		/* Save the pointer of the user allocated command buffer*/
+		
 		u_msg_value = u_isp_event.isp_data.isp_msg.data;
 
-		/* Dequeue the event queued into the v4l2 queue*/
+		
 		rc = v4l2_event_dequeue(
 			&config_cam->config_stat_event_queue.eventHandle,
 			&ev, fp->f_flags & O_NONBLOCK);
@@ -2715,19 +2716,15 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 			rc = -EFAULT;
 			break;
 		}
-		/* Use k_isp_event to point to the event_ctrl structure
-		 * embedded inside v4l2_event.u.data */
 		k_isp_event = (struct msm_isp_event_ctrl *)
 				(*((uint32_t *)ev.u.data));
-		/* Copy the event structure into user struct. */
+		
 		u_isp_event = *k_isp_event;
 		if (ev.type != (V4L2_EVENT_PRIVATE_START +
 				MSM_CAM_RESP_DIV_FRAME_EVT_MSG) &&
 				ev.type != (V4L2_EVENT_PRIVATE_START +
 				MSM_CAM_RESP_MCTL_PP_EVENT)) {
 
-			/* Restore the saved pointer of the
-			 * user allocated command buffer. */
 			u_isp_event.isp_data.isp_msg.data = u_msg_value;
 
 			if (ev.type == (V4L2_EVENT_PRIVATE_START +
@@ -2739,23 +2736,34 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 							k_msg_value,
 					 k_isp_event->isp_data.isp_msg.len)) {
 						rc = -EINVAL;
+						
+						pr_err("%s: %d copy_to_user failed. msg_id: %d, frame id: %d\n",
+							__func__, __LINE__, k_isp_event->isp_data.isp_msg.msg_id,
+							k_isp_event->isp_data.isp_msg.frame_id);
+						kfree(k_msg_value);
+						kfree(k_isp_event);
+						
 						break;
 					}
 					kfree(k_msg_value);
 				}
 			}
 		}
-		/* Copy the event ctrl structure back
-		 * into user's structure. */
 		if (copy_to_user(user_ptr,
 				(void *)&u_isp_event, sizeof(
 				struct msm_isp_event_ctrl))) {
 			rc = -EINVAL;
+			
+			pr_err("%s: %d copy_to_user failed. msg_id: %d, frame id: %d\n",
+				__func__, __LINE__, k_isp_event->isp_data.isp_msg.msg_id,
+				k_isp_event->isp_data.isp_msg.frame_id);
+			kfree(k_isp_event);
+			
 			break;
 		}
 		kfree(k_isp_event);
 
-		/* Copy the v4l2_event structure back to the user*/
+		
 		if (copy_to_user((void __user *)arg, &ev,
 				sizeof(struct v4l2_event))) {
 			rc = -EINVAL;
@@ -2776,7 +2784,7 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 		break;
 
 	default:{
-		/* For the rest of config command, forward to media controller*/
+		
 		struct msm_cam_media_controller *p_mctl = config_cam->p_mctl;
 		if (p_mctl && p_mctl->mctl_cmd) {
 			rc = config_cam->p_mctl->mctl_cmd(p_mctl, cmd, arg);
@@ -2786,8 +2794,8 @@ static long msm_ioctl_config(struct file *fp, unsigned int cmd,
 		}
 
 		break;
-	} /* end of default*/
-	} /* end of switch*/
+	} 
+	} 
 	return rc;
 }
 
@@ -2828,8 +2836,10 @@ end:
 static int msm_open_config(struct inode *inode, struct file *fp)
 {
 	int rc;
+
 	struct msm_cam_config_dev *config_cam = container_of(inode->i_cdev,
 		struct msm_cam_config_dev, config_cdev);
+
 	D("%s: open %s\n", __func__, fp->f_path.dentry->d_name.name);
 
 	rc = nonseekable_open(inode, fp);
@@ -2839,11 +2849,15 @@ static int msm_open_config(struct inode *inode, struct file *fp)
 	}
 	config_cam->use_count++;
 
-	/*config_cam->isp_subdev = g_server_dev.pcam_active->mctl.isp_sdev;*/
-	/* assume there is only one active camera possible*/
+	
+	
 	config_cam->p_mctl =
 		msm_camera_get_mctl(g_server_dev.pcam_active->mctl_handle);
 
+	if(!config_cam->p_mctl)
+		return -EFAULT;
+
+		
 	INIT_HLIST_HEAD(&config_cam->p_mctl->stats_info.pmem_stats_list);
 	spin_lock_init(&config_cam->p_mctl->stats_info.pmem_stats_spinlock);
 
@@ -2861,6 +2875,7 @@ static int msm_close_config(struct inode *node, struct file *f)
 	struct v4l2_event_subscription sub;
 	struct msm_isp_event_ctrl *isp_event;
 	struct msm_cam_config_dev *config_cam = f->private_data;
+	
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
 	D("%s Decrementing ref count of config node ", __func__);
 	kref_put(&config_cam->p_mctl->refcount, msm_release_ion_client);
@@ -2883,6 +2898,7 @@ static int msm_close_config(struct inode *node, struct file *f)
 			kfree(isp_event);
 		}
 	}
+
 	return 0;
 }
 
@@ -2895,10 +2911,6 @@ static struct v4l2_file_operations g_msm_fops = {
 	.ioctl   = video_ioctl2,
 };
 
-/* Init a config node for ISP control,
- * which will create a config device (/dev/config0/ and plug in
- * ISP's operation "v4l2_ioctl_ops*"
- */
 static const struct v4l2_file_operations msm_fops_server = {
 	.owner = THIS_MODULE,
 	.open  = msm_open_server,
@@ -2921,9 +2933,9 @@ static const struct file_operations msm_fops_config = {
 	.release = msm_close_config,
 };
 
-/* HTC_START Andrew_Cheng linear led 20111205 MB */
 static struct camera_flash_info *p_flash_led_info;
-static struct kobject *led_status_obj;
+static struct kobject *led_status_obj; 
+
 static ssize_t flash_led_info_get(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -2937,7 +2949,7 @@ static ssize_t flash_led_info_get(struct device *dev,
 			p_flash_led_info->led_info->num_led_est_table);
 	else
 		length = sprintf(buf, "%d\n", 0);
-	/*pr_info("[CAM] %s: length(%d)\n", __func__, length);*/
+	
 	return length;
 }
 
@@ -2983,7 +2995,7 @@ static uint32_t led_wimax_status_value;
 static uint32_t led_hotspot_status_value;
 static uint16_t led_low_temp_limit;
 static uint16_t led_low_cap_limit;
-
+static uint16_t led_low_cap_limit_dual;
 
 static ssize_t led_ril_status_get(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -3002,7 +3014,7 @@ static ssize_t led_ril_status_set(struct device *dev,
 		tmp = buf[0] - 0x30;
 
 	led_ril_status_value = tmp;
-	pr_info("[CAM]led_ril_status_value = %d\n", led_ril_status_value);
+	pr_info("led_ril_status_value = %d\n", led_ril_status_value);
 	return count;
 }
 
@@ -3023,7 +3035,7 @@ static ssize_t led_wimax_status_set(struct device *dev,
 		tmp = buf[0] - 0x30;
 
 	led_wimax_status_value = tmp;
-	pr_info("[CAM]led_wimax_status_value = %d\n", led_wimax_status_value);
+	pr_info("led_wimax_status_value = %d\n", led_wimax_status_value);
 	return count;
 }
 
@@ -3040,10 +3052,10 @@ static ssize_t led_hotspot_status_set(struct device *dev,
 {
 	uint32_t tmp = 0;
 
-	tmp = buf[0] - 0x30; /* only get the first char */
+	tmp = buf[0] - 0x30; 
 
 	led_hotspot_status_value = tmp;
-	pr_info("[CAM]led_hotspot_status_value = %d\n", led_hotspot_status_value);
+	pr_info("led_hotspot_status_value = %d\n", led_hotspot_status_value);
 	return count;
 }
 
@@ -3060,6 +3072,14 @@ static ssize_t low_cap_limit_get(struct device *dev,
 {
 	ssize_t length;
 	length = sprintf(buf, "%d\n", led_low_cap_limit);
+	return length;
+}
+
+static ssize_t low_cap_limit_dual_get(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	ssize_t length;
+	length = sprintf(buf, "%d\n", led_low_cap_limit_dual);
 	return length;
 }
 
@@ -3083,20 +3103,25 @@ static DEVICE_ATTR(low_cap_limit, 0444,
 	low_cap_limit_get,
 	NULL);
 
+static DEVICE_ATTR(low_cap_limit_dual, 0444,
+	low_cap_limit_dual_get,
+	NULL);
+
 static int msm_sensor_attr_node(struct msm_camera_sensor_info *sdata)
 {
 	int ret = 0;
 
 	led_status_obj = kobject_create_and_add("camera_led_status", NULL);
 	if (led_status_obj == NULL) {
-		pr_info("[CAM]msm_camera: subsystem_register failed\n");
+		pr_info("msm_camera: subsystem_register failed\n");
 		ret = -ENOMEM;
 		goto error;
 	}
+
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_flash_led_info.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file flash_led_info failed\n");
+		pr_info("msm_camera: sysfs_create_file flash_led_info failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
@@ -3104,7 +3129,7 @@ static int msm_sensor_attr_node(struct msm_camera_sensor_info *sdata)
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_flash_led_tbl.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file flash_led_tbl failed\n");
+		pr_info("msm_camera: sysfs_create_file flash_led_tbl failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
@@ -3112,35 +3137,42 @@ static int msm_sensor_attr_node(struct msm_camera_sensor_info *sdata)
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_led_ril_status.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file dev_attr_led_ril_status failed\n");
+		pr_info("msm_camera: sysfs_create_file dev_attr_led_ril_status failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_led_wimax_status.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file dev_attr_led_wimax_status failed\n");
+		pr_info("msm_camera: sysfs_create_file dev_attr_led_wimax_status failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_led_hotspot_status.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file dev_attr_led_hotspot_status failed\n");
+		pr_info("msm_camera: sysfs_create_file dev_attr_led_hotspot_status failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_low_temp_limit.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file dev_attr_low_temp_limit failed\n");
+		pr_info("msm_camera: sysfs_create_file dev_attr_low_temp_limit failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
 	ret = sysfs_create_file(led_status_obj,
 		&dev_attr_low_cap_limit.attr);
 	if (ret) {
-		pr_info("[CAM]msm_camera: sysfs_create_file dev_attr_low_cap_limit failed\n");
+		pr_info("msm_camera: sysfs_create_file dev_attr_low_cap_limit failed\n");
+		ret = -EFAULT;
+		goto error;
+	}
+	ret = sysfs_create_file(led_status_obj,
+		&dev_attr_low_cap_limit_dual.attr);
+	if (ret) {
+		pr_info("msm_camera: sysfs_create_file dev_attr_low_cap_limit_dual failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
@@ -3154,6 +3186,7 @@ static int msm_sensor_attr_node(struct msm_camera_sensor_info *sdata)
 
 	led_low_temp_limit = sdata->flash_cfg->low_temp_limit;
 	led_low_cap_limit = sdata->flash_cfg->low_cap_limit;
+	led_low_cap_limit_dual = sdata->flash_cfg->low_cap_limit_dual;
 
 	return ret;
 
@@ -3161,35 +3194,80 @@ error:
 	kobject_del(led_status_obj);
 	return ret;
 }
-/* HTC_END Andrew_Cheng linear led 20111205 ME */
+
+#ifdef CONFIG_RAWCHIP
+static struct kobject *rawchip_status_obj;
+
+uint32_t rawchip_id;
+
+static ssize_t probed_rawchip_id_get(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	ssize_t length;
+	length = sprintf(buf, "0x%x\n", rawchip_id);
+	return length;
+}
+
+static DEVICE_ATTR(probed_rawchip_id, 0444,
+	probed_rawchip_id_get,
+	NULL);
+
+int msm_rawchip_attr_node(void)
+{
+	int ret = 0;
+
+	rawchip_status_obj = kobject_create_and_add("camera_rawchip_status", NULL);
+	if (rawchip_status_obj == NULL) {
+		pr_err("msm_camera: create camera_rawchip_status failed\n");
+		ret = -ENOMEM;
+		goto error;
+	}
+
+	ret = sysfs_create_file(rawchip_status_obj,
+		&dev_attr_probed_rawchip_id.attr);
+	if (ret) {
+		pr_info("msm_camera: sysfs_create_file dev_attr_probed_rawchip_id failed\n");
+		ret = -EFAULT;
+		goto error;
+	}
+
+	return ret;
+
+error:
+	kobject_del(rawchip_status_obj);
+	return ret;
+}
+#endif
+
+
 int msm_setup_v4l2_event_queue(struct v4l2_fh *eventHandle,
 	struct video_device *pvdev)
 {
 	int rc = 0;
-	/* v4l2_fh support */
+	
 	spin_lock_init(&pvdev->fh_lock);
 	INIT_LIST_HEAD(&pvdev->fh_list);
 
 	rc = v4l2_fh_init(eventHandle, pvdev);
 	if (rc < 0)
 		return rc;
-
 	if (eventHandle->events == NULL) {
 		rc = v4l2_event_init(eventHandle);
 		if (rc < 0)
 			return rc;
 	}
 
-	/* queue of max size 30 */
-	/*HTC_START Max_Sun 20120311, change event queue from 30 to 200 for slow motion problem*/
+	
+	
 	rc = v4l2_event_alloc(eventHandle, 200);
+	
 	if (rc < 0) {
 		pr_err("%s, v4l2_event_alloc failed, rc = %d", __func__, rc);
 		return rc;
 	}
-	/* HTC_END */
 	v4l2_fh_add(eventHandle);
 	return rc;
+
 }
 
 static int msm_setup_config_dev(int node, char *device_name)
@@ -3255,8 +3333,8 @@ static int msm_setup_config_dev(int node, char *device_name)
 config_setup_fail:
 	kfree(config_cam);
 	return rc;
-}
 
+}
 static void msm_cam_server_subdev_notify(struct v4l2_subdev *sd,
 				unsigned int notification, void *arg)
 {
@@ -3280,7 +3358,7 @@ static void msm_cam_server_subdev_notify(struct v4l2_subdev *sd,
 
 	switch (notification) {
 	case NOTIFY_CID_CHANGE:
-		/* reconfig the ISPIF*/
+		
 		if (g_server_dev.ispif_device) {
 			struct msm_ispif_params_list ispif_params;
 			ispif_params.len = 1;
@@ -3296,7 +3374,7 @@ static void msm_cam_server_subdev_notify(struct v4l2_subdev *sd,
 		}
 		break;
 	case NOTIFY_ISPIF_STREAM:
-		/* call ISPIF stream on/off */
+		
 		rc = v4l2_subdev_call(g_server_dev.ispif_device, video,
 				s_stream, (int)arg);
 		if (rc < 0)
@@ -3339,6 +3417,7 @@ static void msm_cam_server_subdev_notify(struct v4l2_subdev *sd,
 		rc = v4l2_subdev_call(g_server_dev.axi_device[0],
 			core, ioctl, VIDIOC_MSM_AXI_IRQ, arg);
 		break;
+	
 	case NOTIFY_PCLK_CHANGE:
 		if (g_server_dev.axi_device[0])
 			rc = v4l2_subdev_call(g_server_dev.axi_device[0], video,
@@ -3366,7 +3445,7 @@ static void msm_cam_server_subdev_notify(struct v4l2_subdev *sd,
 	case NOTIFY_GESTURE_CAM_EVT:
 		rc = v4l2_subdev_call(g_server_dev.gesture_device,
 			core, ioctl, VIDIOC_MSM_GESTURE_CAM_EVT, arg);
-		break;
+		break;		
 	default:
 		break;
 	}
@@ -3405,8 +3484,9 @@ int msm_cam_register_subdev_node(struct v4l2_subdev *sd,
 	} else if (sdev_type == AXI_DEV) {
 		if (index >= MAX_NUM_AXI_DEV)
 			return -EINVAL;
-		g_server_dev.axi_device[index] = sd;
-	} else if (sdev_type == GESTURE_DEV) {
+		g_server_dev.axi_device[index] = sd;		
+	}
+	else if (sdev_type == GESTURE_DEV) {
 		g_server_dev.gesture_device = sd;
 	}
 
@@ -3414,9 +3494,6 @@ int msm_cam_register_subdev_node(struct v4l2_subdev *sd,
 	if (err < 0)
 		return err;
 
-	/* Register a device node for every subdev marked with the
-	 * V4L2_SUBDEV_FL_HAS_DEVNODE flag.
-	 */
 	if (!(sd->flags & V4L2_SUBDEV_FL_HAS_DEVNODE))
 		return err;
 
@@ -3436,6 +3513,7 @@ int msm_cam_register_subdev_node(struct v4l2_subdev *sd,
 	return 0;
 }
 
+
 static int msm_setup_server_dev(struct platform_device *pdev)
 {
 	int rc = -ENODEV, i;
@@ -3444,10 +3522,12 @@ static int msm_setup_server_dev(struct platform_device *pdev)
 	g_server_dev.server_pdev = pdev;
 	g_server_dev.v4l2_dev.dev = &pdev->dev;
 	g_server_dev.v4l2_dev.notify = msm_cam_server_subdev_notify;
+
 	rc = v4l2_device_register(g_server_dev.v4l2_dev.dev,
 			&g_server_dev.v4l2_dev);
 	if (rc < 0)
 		return -EINVAL;
+
 
 	g_server_dev.video_dev = video_device_alloc();
 	if (g_server_dev.video_dev == NULL) {
@@ -3470,11 +3550,14 @@ static int msm_setup_server_dev(struct platform_device *pdev)
 	strlcpy(g_server_dev.media_dev.model, "qcamera",
 		sizeof(g_server_dev.media_dev.model));
 	g_server_dev.media_dev.dev = &pdev->dev;
+#if defined(CONFIG_MEDIA_CONTROLLER)
 	rc = media_device_register(&g_server_dev.media_dev);
-	g_server_dev.v4l2_dev.mdev = &g_server_dev.media_dev;
 
+	g_server_dev.v4l2_dev.mdev = &g_server_dev.media_dev;
+#endif
 	rc = video_register_device(g_server_dev.video_dev,
 		VFL_TYPE_GRABBER, 100);
+
 
 	mutex_init(&g_server_dev.server_lock);
 	mutex_init(&g_server_dev.server_queue_lock);
@@ -3483,19 +3566,18 @@ static int msm_setup_server_dev(struct platform_device *pdev)
 	atomic_set(&g_server_dev.number_pcam_active, 0);
 	g_server_dev.server_evt_id = 0;
 
-	/*initialize fake video device and event queue*/
+	
 
 	g_server_dev.server_command_queue.pvdev = g_server_dev.video_dev;
+
 	rc = msm_setup_v4l2_event_queue(
 		&g_server_dev.server_command_queue.eventHandle,
 		g_server_dev.server_command_queue.pvdev);
-
 	if (rc < 0) {
 		pr_err("%s failed to initialize event queue\n", __func__);
 		video_device_release(g_server_dev.server_command_queue.pvdev);
 		return rc;
 	}
-
 	for (i = 0; i < MAX_NUM_ACTIVE_CAMERA; i++) {
 		struct msm_cam_server_queue *queue;
 		queue = &g_server_dev.server_queue[i];
@@ -3513,7 +3595,7 @@ static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 	struct i2c_client *client = v4l2_get_subdevdata(pcam->sensor_sdev);
 	D("%s\n", __func__);
 
-	/* first register the v4l2 device */
+	
 	pcam->v4l2_dev.dev = &client->dev;
 	rc = v4l2_device_register(pcam->v4l2_dev.dev, &pcam->v4l2_dev);
 	if (rc < 0)
@@ -3522,26 +3604,26 @@ static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 		pcam->v4l2_dev.notify = msm_cam_v4l2_subdev_notify;
 
 
-	/* now setup video device */
+	
 	pvdev = video_device_alloc();
 	if (pvdev == NULL) {
 		pr_err("%s: video_device_alloc failed\n", __func__);
 		return rc;
 	}
 
+#if defined(CONFIG_MEDIA_CONTROLLER)
 	strlcpy(pcam->media_dev.model, QCAMERA_NAME,
 			sizeof(pcam->media_dev.model));
 	pcam->media_dev.dev = &client->dev;
 	rc = media_device_register(&pcam->media_dev);
 	pvdev->v4l2_dev = &pcam->v4l2_dev;
 	pcam->v4l2_dev.mdev = &pcam->media_dev;
+#endif
 
-	/* init video device's driver interface */
+	
 	D("sensor name = %s, sizeof(pvdev->name)=%d\n",
 		pcam->sensor_sdev->name, sizeof(pvdev->name));
 
-	/* device info - strlcpy is safer than strncpy but
-	   only if architecture supports*/
 	strlcpy(pvdev->name, pcam->sensor_sdev->name, sizeof(pvdev->name));
 
 	pvdev->release   = video_device_release;
@@ -3550,11 +3632,13 @@ static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 	pvdev->minor	 = -1;
 	pvdev->vfl_type  = 1;
 
+#if defined(CONFIG_MEDIA_CONTROLLER)
 	media_entity_init(&pvdev->entity, 0, NULL, 0);
 	pvdev->entity.type = MEDIA_ENT_T_DEVNODE_V4L;
 	pvdev->entity.group_id = QCAMERA_VNODE_GROUP_ID;
+#endif
 
-	/* register v4l2 video device to kernel as /dev/videoXX */
+	
 	D("video_register_device\n");
 	rc = video_register_device(pvdev,
 					VFL_TYPE_GRABBER,
@@ -3563,22 +3647,20 @@ static int msm_cam_dev_init(struct msm_cam_v4l2_device *pcam)
 		pr_err("%s: video_register_device failed\n", __func__);
 		goto reg_fail;
 	}
+
+#if defined(CONFIG_MEDIA_CONTROLLER)
 	pvdev->entity.name = video_device_node_name(pvdev);
+#endif
+
 	D("%s: video device registered as /dev/video%d\n",
 		__func__, pvdev->num);
 
-	/* connect pcam and video dev to each other */
+	
 	pcam->pvdev	= pvdev;
 	video_set_drvdata(pcam->pvdev, pcam);
 
-	/* If isp HW registeration is successful,
-	 * then create event queue to
-	 * receievent event froms HW
-	*/
-	/* yyan: no global - each sensor will
-	 * create a new vidoe node! */
-	/* g_pmsm_camera_v4l2_dev = pmsm_camera_v4l2_dev; */
-	/* g_pmsm_camera_v4l2_dev->pvdev = pvdev; */
+	
+	
 
 	return rc ;
 
@@ -3589,13 +3671,14 @@ reg_fail:
 	return rc;
 }
 
-static struct v4l2_subdev *msm_actuator_probe(
-	struct msm_actuator_info *actuator_info)
+static int msm_actuator_probe(struct msm_actuator_info *actuator_info,
+			      struct v4l2_subdev *act_sdev,
+			      struct msm_actuator_ctrl *actctrl)
 {
-	struct v4l2_subdev *act_sdev;
+	int rc = 0;
 	struct i2c_adapter *adapter = NULL;
-	struct msm_actuator_ctrl_t *actrl;
 	void *act_client = NULL;
+	struct msm_actuator_ctrl *a_ext_ctrl = NULL;
 
 	D("%s called\n", __func__);
 
@@ -3610,20 +3693,14 @@ static struct v4l2_subdev *msm_actuator_probe(
 	if (!act_client)
 		goto device_fail;
 
-	act_sdev = (struct v4l2_subdev *)i2c_get_clientdata(act_client);
-	if (act_sdev == NULL)
+	a_ext_ctrl = (struct msm_actuator_ctrl *)i2c_get_clientdata(act_client);
+	if (!a_ext_ctrl)
 		goto client_fail;
 
-	if (actuator_info->vcm_enable) {
-		actrl = get_actrl(act_sdev);
-		if (actrl) {
-			actrl->vcm_enable = actuator_info->vcm_enable;
-			actrl->vcm_pwd = actuator_info->vcm_pwd;
-			actrl->use_rawchip_af = actuator_info->use_rawchip_af; /* HTC Angie 20120615 */
-		}
-	}
-
-	return act_sdev;
+	*actctrl = *a_ext_ctrl;
+	a_ext_ctrl->a_create_subdevice((void *)actuator_info,
+				       (void *)act_sdev);
+	return rc;
 
 client_fail:
 	i2c_unregister_device(act_client);
@@ -3631,59 +3708,26 @@ device_fail:
 	i2c_put_adapter(adapter);
 	adapter = NULL;
 probe_fail:
-	return NULL;
+	actctrl->a_init_table = NULL;
+	actctrl->a_power_up = NULL;
+	actctrl->a_power_down = NULL;
+	actctrl->a_config = NULL;
+	actctrl->a_create_subdevice = NULL;
+	return rc;
 }
 
-static struct v4l2_subdev *msm_eeprom_probe(
-	struct msm_eeprom_info *eeprom_info)
-{
-	struct v4l2_subdev *eeprom_sdev;
-	struct i2c_adapter *adapter = NULL;
-	void *eeprom_client = NULL;
-
-	D("%s called\n", __func__);
-
-	if (!eeprom_info)
-		goto probe_fail;
-
-	adapter = i2c_get_adapter(eeprom_info->bus_id);
-	if (!adapter)
-		goto probe_fail;
-
-	eeprom_client = i2c_new_device(adapter, eeprom_info->board_info);
-	if (!eeprom_client)
-		goto device_fail;
-
-	eeprom_sdev = (struct v4l2_subdev *)i2c_get_clientdata(eeprom_client);
-	if (eeprom_sdev == NULL)
-		goto client_fail;
-
-	return eeprom_sdev;
-client_fail:
-	pr_err("%s client_fail\n", __func__);
-	i2c_unregister_device(eeprom_client);
-device_fail:
-	pr_err("%s device_fail\n", __func__);
-	i2c_put_adapter(adapter);
-	adapter = NULL;
-probe_fail:
-	pr_err("%s probe_fail\n", __func__);
-	return NULL;
-}
-
-/* register a msm sensor into the msm device, which will probe the
- * sensor HW. if the HW exist then create a video device (/dev/videoX/)
- * to represent this sensor */
 int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 {
 	int rc = -EINVAL;
 	struct msm_camera_sensor_info *sdata;
 	struct msm_cam_v4l2_device *pcam;
 	struct msm_sensor_ctrl_t *s_ctrl;
+	struct v4l2_subdev *act_sdev = NULL;
+	struct msm_actuator_ctrl *actctrl = NULL;
 
 	D("%s for %s\n", __func__, sensor_sd->name);
 
-	/* allocate the memory for the camera device first */
+	
 	pcam = kzalloc(sizeof(*pcam), GFP_KERNEL);
 	if (!pcam) {
 		pr_err("%s: could not allocate mem for msm_cam_v4l2_device\n",
@@ -3693,35 +3737,47 @@ int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 
 	pcam->sensor_sdev = sensor_sd;
 	s_ctrl = get_sctrl(sensor_sd);
+	if(!s_ctrl) goto failure;
 	sdata = (struct msm_camera_sensor_info *) s_ctrl->sensordata;
+	if(!sdata) goto failure;
 
-	/* Andrew_Cheng linear led 20111205 MB */
-	if (sdata->flash_cfg)
-		msm_sensor_attr_node(sdata);
-	/* Andrew_Cheng linear led 20111205 ME */
+	pcam->act_sdev = kzalloc(sizeof(struct v4l2_subdev),
+								  GFP_KERNEL);
+	if (!pcam->act_sdev) {
+		pr_err("%s: could not allocate mem for actuator v4l2_subdev\n",
+			   __func__);
+		kfree(pcam);
+		return -ENOMEM;
+	}
 
-/* HTC_START Angie 20120615 */
+	act_sdev = pcam->act_sdev;
+	actctrl = &pcam->actctrl;
+
+	
 	if (sdata->actuator_info) {
 		if (sdata->use_rawchip)
 			sdata->actuator_info->use_rawchip_af = 1;
 		else
 			sdata->actuator_info->use_rawchip_af = 0;
 	}
-/* HTC_END */
+	
 
-	pcam->act_sdev = msm_actuator_probe(sdata->actuator_info);
-	pcam->eeprom_sdev = msm_eeprom_probe(sdata->eeprom_info);
-
-	D("%s: pcam =0x%p\n", __func__, pcam);
+	msm_actuator_probe(sdata->actuator_info,
+					   act_sdev, actctrl);
 
 	pcam->sdata = sdata;
 
-	/* init the user count and lock*/
+	
+	if (pcam->sdata && pcam->sdata->flash_cfg )
+		msm_sensor_attr_node(pcam->sdata);
+	
+
+	
 	pcam->use_count = 0;
 	mutex_init(&pcam->vid_lock);
 	mutex_init(&pcam->mctl_node.dev_lock);
 
-	/* Initialize the formats supported */
+	
 	rc  = msm_mctl_init_user_formats(pcam);
 	if (rc < 0)
 		goto failure;
@@ -3761,9 +3817,6 @@ int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 		g_server_dev.mctl_node_info.mctl_node_name
 		[g_server_dev.mctl_node_info.num_mctl_nodes]);
 
-	/*Temporary solution to store info in media device structure
-	  until we can expand media device structure to support more
-	  device info*/
 	snprintf(pcam->media_dev.serial,
 			sizeof(pcam->media_dev.serial),
 			"%s-%d-%d", QCAMERA_NAME,
@@ -3777,7 +3830,7 @@ int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 	D("%s number of sensors connected is %d\n", __func__,
 		g_server_dev.camera_info.num_cameras);
 
-	/* register the subdevice, must be done for callbacks */
+	
 	rc = msm_cam_register_subdev_node(sensor_sd, SENSOR_DEV, vnode_count);
 	if (rc < 0) {
 		D("%s sensor sub device register failed\n",
@@ -3785,21 +3838,11 @@ int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 		goto failure;
 	}
 
-	if (pcam->act_sdev) {
-		rc = v4l2_device_register_subdev(&pcam->v4l2_dev,
-				pcam->act_sdev);
+	if (sdata->actuator_info) {
+		rc = v4l2_device_register_subdev(&pcam->v4l2_dev, act_sdev);
 		if (rc < 0) {
 			D("%s actuator sub device register failed\n",
 			  __func__);
-			goto failure;
-		}
-	}
-
-	if (pcam->eeprom_sdev) {
-		rc = v4l2_device_register_subdev(&pcam->v4l2_dev,
-			pcam->eeprom_sdev);
-		if (rc < 0) {
-			D("%s eeprom sub device register failed\n", __func__);
 			goto failure;
 		}
 	}
@@ -3808,19 +3851,21 @@ int msm_sensor_register(struct v4l2_subdev *sensor_sd)
 	return rc;
 
 failure:
+	kfree(act_sdev);
 	kzfree(pcam);
 	return rc;
 }
 EXPORT_SYMBOL(msm_sensor_register);
 
-//HTC_START howard 20111209
 static struct switch_dev htccallback_switch = {
 	.name = "htccallback",
 };
 
 static struct kobject *htccallback_obj;
+static struct kobject *camera_attrs_obj;
 
 static uint32_t htccallback_value;
+static uint32_t videochat_value;
 
 static ssize_t htccallback_set(struct device *dev,
                 struct device_attribute *attr, const char *buf, size_t count)
@@ -3830,23 +3875,48 @@ static ssize_t htccallback_set(struct device *dev,
 
 	switch_set_state(&htccallback_switch, htccallback_value);
 
-       pr_info("[CAM]htccallback_value = %d\n", htccallback_value);
+       pr_info("htccallback_value = %d\n", htccallback_value);
 
        return count;
+}
+
+static ssize_t videochat_get(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	ssize_t length;
+	length = sprintf(buf, "%d\n", videochat_value);
+	return length;
+}
+
+static ssize_t videochat_set(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	uint32_t tmp = 0;
+
+	if (buf[1] == '\n')
+		tmp = buf[0] - 0x30;
+
+	videochat_value = tmp;
+	pr_info("videochat_value = %d\n", videochat_value);
+	return count;
 }
 
 static DEVICE_ATTR(htccallback, 0660,
     NULL,
     htccallback_set);
 
+static DEVICE_ATTR(videochat, 0660,
+    videochat_get,
+    videochat_set);
+
 static int msm_camera_sysfs_init(void)
 {
 	int ret = 0;
-	pr_info("[CAM] htccallback:kobject creat and add\n");
+	pr_info("htccallback:kobject creat and add\n");
 
        htccallback_obj = kobject_create_and_add("camera_htccallback", NULL);
        if (htccallback_obj == NULL) {
-              pr_info("[CAM]htccallback: subsystem_register_htccallback failed\n");
+              pr_info("htccallback: subsystem_register_htccallback failed\n");
               ret = -ENOMEM;
               goto error;
        }
@@ -3854,28 +3924,47 @@ static int msm_camera_sysfs_init(void)
        ret = sysfs_create_file(htccallback_obj,
                   &dev_attr_htccallback.attr);
 	if (ret) {
-		pr_info("[CAM]htccallback: sysfs_create_htccallback_file failed\n");
+		pr_info("htccallback: sysfs_create_htccallback_file failed\n");
 		ret = -EFAULT;
 		goto error;
 	}
 	if (switch_dev_register(&htccallback_switch) < 0) {
-		pr_info("[CAM]htccallback : switch_dev_register error\n");
+		pr_info("htccallback : switch_dev_register error\n");
 	}
+
+
+	pr_info("camera_attrs:kobject creat and add\n");
+
+       camera_attrs_obj = kobject_create_and_add("camera_attrs", NULL);
+       if (camera_attrs_obj == NULL) {
+              pr_info("camera_attrs: subsystem_register_camera_attrs failed\n");
+              ret = -ENOMEM;
+              goto error;
+       }
+
+       ret = sysfs_create_file(camera_attrs_obj,
+                  &dev_attr_videochat.attr);
+	if (ret) {
+		pr_info("dev_attr_videochat: sysfs_create_dev attr_videochat file failed\n");
+		ret = -EFAULT;
+		goto error;
+	}
+
 	return ret;
 error:
 	kobject_del(htccallback_obj);
+	kobject_del(camera_attrs_obj);
 	return ret;
 }
-//HTC_END
+extern int system_rev;
 
 static int __devinit msm_camera_probe(struct platform_device *pdev)
 {
 	int rc = 0, i;
-	/*for now just create a config 0 node
-	  put logic here later to know how many configs to create*/
+
+	pr_info("system rev = %d",system_rev);
 	g_server_dev.config_info.num_config_nodes = 1;
 
-	pr_info("[CAM]%s\n", __func__);
 	rc = msm_isp_init_module(g_server_dev.config_info.num_config_nodes);
 	if (rc < 0) {
 		pr_err("Failed to initialize isp\n");
@@ -3917,15 +4006,11 @@ static int __devinit msm_camera_probe(struct platform_device *pdev)
 		}
 	}
 
-//HTC_START howard 20111209
-    msm_camera_sysfs_init();
-//HTC_END
+	msm_camera_sysfs_init();
 
-/* HTC_START chris 20120706 */
 #ifdef CONFIG_PERFLOCK
-	perf_lock_init(&g_server_dev.cam_perf_lock, PERF_LOCK_HIGHEST, "camera_v4l2");
+	perf_lock_init(&g_server_dev.cam_perf_lock, TYPE_PERF_LOCK, PERF_LOCK_HIGHEST, "camera_v4l2");
 #endif
-/* HTC_END */
 
 	msm_isp_register(&g_server_dev);
 	return rc;
@@ -3954,8 +4039,9 @@ static int __init msm_camera_init(void)
 
 static void __exit msm_cam_server_exit(void)
 {
-	platform_driver_unregister(&msm_cam_server_driver);
+	platform_driver_unregister(&msm_cam_server_driver);	
 }
 
 module_init(msm_camera_init);
 module_exit(msm_cam_server_exit);
+

@@ -148,11 +148,11 @@ static int sleep_stat_suspend_notifier(struct notifier_block *nb,
 	unsigned long event, void *dummy)
 {
 	switch (event) {
-	/* enter suspend */
+	
 	case PM_SUSPEND_PREPARE:
 		print_sleep_stat(F_SUSPEND);
 		return NOTIFY_OK;
-	/* exit suspend */
+	
 	case PM_POST_SUSPEND:
 		print_sleep_stat(F_RESUME);
 		print_negate_client_stat();
@@ -531,7 +531,7 @@ static int debug_test_smsm(char *buf, int max)
 	int test_num = 0;
 	int ret;
 
-	/* Test case 1 - Register new callback for notification */
+	
 	do {
 		test_num++;
 		SMSM_CB_TEST_INIT();
@@ -539,7 +539,7 @@ static int debug_test_smsm(char *buf, int max)
 				smsm_state_cb, (void *)0x1234);
 		UT_EQ_INT(ret, 0);
 
-		/* de-assert SMSM_SMD_INIT to trigger state update */
+		
 		UT_EQ_INT(smsm_cb_data.cb_count, 0);
 		INIT_COMPLETION(smsm_cb_completion);
 		smsm_change_state(SMSM_APPS_STATE, SMSM_SMDINIT, 0x0);
@@ -551,7 +551,7 @@ static int debug_test_smsm(char *buf, int max)
 		UT_EQ_INT(smsm_cb_data.new_state & SMSM_SMDINIT, 0x0);
 		UT_EQ_INT((int)smsm_cb_data.data, 0x1234);
 
-		/* re-assert SMSM_SMD_INIT to trigger state update */
+		
 		INIT_COMPLETION(smsm_cb_completion);
 		smsm_change_state(SMSM_APPS_STATE, 0x0, SMSM_SMDINIT);
 		UT_GT_INT((int)wait_for_completion_timeout(&smsm_cb_completion,
@@ -560,12 +560,12 @@ static int debug_test_smsm(char *buf, int max)
 		UT_EQ_INT(smsm_cb_data.old_state & SMSM_SMDINIT, 0x0);
 		UT_EQ_INT(smsm_cb_data.new_state & SMSM_SMDINIT, SMSM_SMDINIT);
 
-		/* deregister callback */
+		
 		ret = smsm_state_cb_deregister(SMSM_APPS_STATE, SMSM_SMDINIT,
 				smsm_state_cb, (void *)0x1234);
 		UT_EQ_INT(ret, 2);
 
-		/* make sure state change doesn't cause any more callbacks */
+		
 		INIT_COMPLETION(smsm_cb_completion);
 		smsm_change_state(SMSM_APPS_STATE, SMSM_SMDINIT, 0x0);
 		smsm_change_state(SMSM_APPS_STATE, 0x0, SMSM_SMDINIT);
@@ -576,7 +576,7 @@ static int debug_test_smsm(char *buf, int max)
 		i += scnprintf(buf + i, max - i, "Test %d - PASS\n", test_num);
 	} while (0);
 
-	/* Test case 2 - Update already registered callback */
+	
 	do {
 		test_num++;
 		SMSM_CB_TEST_INIT();
@@ -587,7 +587,7 @@ static int debug_test_smsm(char *buf, int max)
 				smsm_state_cb, (void *)0x1234);
 		UT_EQ_INT(ret, 1);
 
-		/* verify both callback bits work */
+		
 		INIT_COMPLETION(smsm_cb_completion);
 		UT_EQ_INT(smsm_cb_data.cb_count, 0);
 		smsm_change_state(SMSM_APPS_STATE, SMSM_SMDINIT, 0x0);
@@ -611,7 +611,7 @@ static int debug_test_smsm(char *buf, int max)
 					msecs_to_jiffies(20)), 0);
 		UT_EQ_INT(smsm_cb_data.cb_count, 4);
 
-		/* deregister 1st callback */
+		
 		ret = smsm_state_cb_deregister(SMSM_APPS_STATE, SMSM_SMDINIT,
 				smsm_state_cb, (void *)0x1234);
 		UT_EQ_INT(ret, 1);
@@ -633,12 +633,12 @@ static int debug_test_smsm(char *buf, int max)
 					msecs_to_jiffies(20)), 0);
 		UT_EQ_INT(smsm_cb_data.cb_count, 6);
 
-		/* deregister 2nd callback */
+		
 		ret = smsm_state_cb_deregister(SMSM_APPS_STATE, SMSM_INIT,
 				smsm_state_cb, (void *)0x1234);
 		UT_EQ_INT(ret, 2);
 
-		/* make sure state change doesn't cause any more callbacks */
+		
 		INIT_COMPLETION(smsm_cb_completion);
 		smsm_change_state(SMSM_APPS_STATE, SMSM_INIT, 0x0);
 		smsm_change_state(SMSM_APPS_STATE, 0x0, SMSM_INIT);
@@ -649,7 +649,7 @@ static int debug_test_smsm(char *buf, int max)
 		i += scnprintf(buf + i, max - i, "Test %d - PASS\n", test_num);
 	} while (0);
 
-	/* Test case 3 - Two callback registrations with different data */
+	
 	do {
 		test_num++;
 		SMSM_CB_TEST_INIT();
@@ -660,7 +660,7 @@ static int debug_test_smsm(char *buf, int max)
 				smsm_state_cb, (void *)0x3456);
 		UT_EQ_INT(ret, 0);
 
-		/* verify both callbacks work */
+		
 		INIT_COMPLETION(smsm_cb_completion);
 		UT_EQ_INT(smsm_cb_data.cb_count, 0);
 		smsm_change_state(SMSM_APPS_STATE, SMSM_SMDINIT, 0x0);
@@ -676,10 +676,6 @@ static int debug_test_smsm(char *buf, int max)
 		UT_EQ_INT(smsm_cb_data.cb_count, 2);
 		UT_EQ_INT((int)smsm_cb_data.data, 0x3456);
 
-		/* cleanup and unregister
-		 * degregister in reverse to verify data field is
-		 * being used
-		 */
 		smsm_change_state(SMSM_APPS_STATE, 0x0, SMSM_SMDINIT);
 		smsm_change_state(SMSM_APPS_STATE, 0x0, SMSM_INIT);
 		ret = smsm_state_cb_deregister(SMSM_APPS_STATE,
@@ -813,7 +809,6 @@ static int debug_read_smem_version(char *buf, int max)
 	return i;
 }
 
-/* NNV: revist, it may not be smd version */
 static int debug_read_smd_version(char *buf, int max)
 {
 	uint32_t *smd_ver;
@@ -926,18 +921,12 @@ static ssize_t debug_read(struct file *file, char __user *buf,
 	return simple_read_from_buffer(buf, count, ppos, debug_buffer, bsize);
 }
 
-static int debug_open(struct inode *inode, struct file *file)
-{
-	file->private_data = inode->i_private;
-	return 0;
-}
-
 static const struct file_operations debug_ops = {
 	.read = debug_read,
-	.open = debug_open,
+	.open = simple_open,
 };
 
-static void debug_create(const char *name, mode_t mode,
+static void debug_create(const char *name, umode_t mode,
 			 struct dentry *dent,
 			 int (*fill)(char *buf, int max))
 {
@@ -979,9 +968,6 @@ static struct mem_sleep_stat_attr mem_sleep_stat_attrs[] = {
 	SLEEP_STAT_ATTR(mo_3g_probe_cnt),
 };
 
-/**
- * show_mem_sleep_stat_attr - current MEM Sleep status attributes
- */
 static ssize_t show_mem_sleep_stat_attr(struct device *dev,
                       struct mem_sleep_stat_attr *attr,
                       char *buf)
@@ -1075,7 +1061,7 @@ static int __init smd_debugfs_init(void)
 	debug_create("int_stats", 0444, dent, debug_int_stats);
 	debug_create("int_stats_reset", 0444, dent, debug_int_stats_reset);
 
-	/* NNV: this is google only stuff */
+	
 	debug_create("build", 0444, dent, debug_read_build_id);
 #if CONFIG_SMD_OFFSET_TCXO_STAT
 	sleep_stat = get_smem_sleep_stat();
@@ -1146,9 +1132,6 @@ struct tramp_gpio_smem {
 	uint32_t polarity[NUM_GPIO_INT_REGISTERS];
 };
 
-/*
- * Print debug information on shared memory sleep variables
- */
 void smsm_print_sleep_info(uint32_t sleep_delay, uint32_t sleep_limit,
 	uint32_t irq_mask, uint32_t wakeup_reason, uint32_t pending_irqs)
 {

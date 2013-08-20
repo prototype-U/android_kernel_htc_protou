@@ -27,26 +27,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 *====*====*====*====*====*====*====*====*====*====*====*====*====*====*====*/
-/*===========================================================================
-
-                      EDIT HISTORY FOR FILE
-
-This section contains comments describing changes made to this file.
-Notice that changes are listed in reverse chronological order.
-   
-  
-$Header: //source/qcom/qct/multimedia2/AdspSvc/7XXX/qdsp5cmd/video/qdsp5lpmcmdi.h#2 $ $DateTime: 2008/07/30 10:50:23 $ $Author: pavanr $                     
-Revision History:                                            
-  
-when       who     what, where, why
---------   ---     ----------------------------------------------------------
-06/12/08   sv      initial version
-===========================================================================*/
 
 
-/*
- * Command to start LPM processing based on the config params
- */
 
 #define	LPM_CMD_START		0x0000
 #define	LPM_CMD_START_LEN	sizeof(lpm_cmd_start)
@@ -67,9 +49,6 @@ typedef struct {
 
 
 
-/*
- * Command to stop LPM processing
- */
 
 #define	LPM_CMD_IDLE		0x0001
 #define	LPM_CMD_IDLE_LEN	sizeof(lpm_cmd_idle)

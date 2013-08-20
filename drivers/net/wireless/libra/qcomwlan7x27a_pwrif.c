@@ -16,6 +16,7 @@
 #include <mach/rpc_pmapp.h>
 #include <linux/err.h>
 #include <linux/qcomwlan7x27a_pwrif.h>
+#include <linux/module.h>
 
 #define WLAN_GPIO_EXT_POR_N     134
 
@@ -159,12 +160,8 @@ int chip_power_qrf6285(bool on)
 				}
 			}
 
-			/*At this point CLK_PWR_REQ is high*/
+			
 			if (WLAN_VREG_L6 == index) {
-				/*
-				 * Configure A0 clock to be slave to
-				 * WLAN_CLK_PWR_REQ
-`				 */
 				rc = pmapp_clock_vote(id, PMAPP_CLOCK_ID_A0,
 						PMAPP_CLOCK_VOTE_PIN_CTRL);
 				if (rc) {

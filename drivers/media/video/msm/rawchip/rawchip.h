@@ -73,6 +73,7 @@ struct rawchip_sensor_data {
 	struct msm_sensor_ctrl_t *s_ctrl;
 	void (*sensor_start_stream)(struct msm_sensor_ctrl_t *s_ctrl);
 	void (*sensor_stop_stream)(struct msm_sensor_ctrl_t *s_ctrl);
+	uint8_t use_rawchip;
 };
 
 struct rawchip_ctrl {

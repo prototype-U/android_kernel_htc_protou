@@ -21,14 +21,6 @@
 #ifndef __ASM_ARCH_MSM_IOMAP_8625_H
 #define __ASM_ARCH_MSM_IOMAP_8625_H
 
-/* Physical base address and size of peripherals.
- * Ordered by the virtual base addresses they will be mapped at.
- *
- * If you add or remove entries here, you'll want to edit the
- * msm_io_desc array in arch/arm/mach-msm/io.c to reflect your
- * changes.
- *
- */
 
 #define MSM8625_TMR_PHYS		0xC0800000
 #define MSM8625_TMR_SIZE		SZ_4K
@@ -54,7 +46,16 @@
 #define MSM8625_SAW1_PHYS		0xC0700000
 #define MSM8625_SAW1_SIZE		SZ_4K
 
+#define MSM8625_SAW2_PHYS		0xC0A00000
+#define MSM8625_SAW2_SIZE		SZ_4K
+
+#define MSM8625_SAW3_PHYS		0xC0B00000
+#define MSM8625_SAW3_SIZE		SZ_4K
+
 #define MSM8625_CFG_CTL_PHYS		0xA9800000
 #define MSM8625_CFG_CTL_SIZE		SZ_4K
+
+#define MSM8625_CPR_PHYS		0xC0900000
+#define MSM8625_CPR_SIZE		SZ_4K
 
 #endif

@@ -22,13 +22,13 @@
 #include <linux/module.h>
 #include <mach/msm_iomap.h>
 #include <mach/system.h>
+#include <mach/proc_comm.h>
 
-#include "proc_comm.h"
 #include "smd_private.h"
 
 static inline void notify_other_proc_comm(void)
 {
-	/* Make sure the write completes before interrupt */
+	
 	wmb();
 #if defined(CONFIG_ARCH_MSM7X30)
 	__raw_writel(1 << 6, MSM_APCS_GCC_BASE + 0x8);
@@ -52,18 +52,10 @@ static inline void notify_other_proc_comm(void)
 static DEFINE_SPINLOCK(proc_comm_lock);
 static int msm_proc_comm_disable;
 
-/* Poll for a state change, checking for possible
- * modem crashes along the way (so we don't wait
- * forever while the ARM9 is blowing up.
- *
- * Return an error in the event of a modem crash and
- * restart so the msm_proc_comm() routine can restart
- * the operation from the beginning.
- */
 static int proc_comm_wait_for(unsigned addr, unsigned value)
 {
 	while (1) {
-		/* Barrier here prevents excessive spinning */
+		
 		mb();
 		if (readl_relaxed(addr) == value)
 			return 0;
@@ -92,7 +84,7 @@ again:
 
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 
-	/* Make sure the writes complete before notifying the other side */
+	
 	wmb();
 	notify_other_proc_comm();
 
@@ -118,9 +110,9 @@ again:
 	if (proc_comm_wait_for(base + MDM_STATUS, PCOM_READY))
 		goto again;
 
-#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_PROTODUG) || defined(CONFIG_MACH_PROTODCG) || defined(CONFIG_MACH_MAGNIDS))
+#if (defined(CONFIG_MACH_PRIMODS) || defined(CONFIG_MACH_PROTOU) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
        if ((cmd == PCOM_CLKCTL_RPC_DISABLE) && (*data1 == 0x1F)) {
-               printk(KERN_ERR "%s someone is trying to turn off UART1 clock, ignore\n", __func__);
+               
                ret = 0;
                goto end;
        }
@@ -129,7 +121,7 @@ again:
 	writel_relaxed(data1 ? *data1 : 0, base + APP_DATA1);
 	writel_relaxed(data2 ? *data2 : 0, base + APP_DATA2);
 
-	/* Make sure the writes complete before notifying the other side */
+	
 	wmb();
 	notify_other_proc_comm();
 
@@ -153,7 +145,7 @@ again:
 	case PCOM_RESET_CHIP_IMM:
 	case PCOM_RESET_APPS:
 #if 1
-		/* Do not disable proc_comm when device reset */
+		
 #else
 		msm_proc_comm_disable = 1;
 		printk(KERN_ERR "msm: proc_comm: proc comm disabled\n");
@@ -161,7 +153,7 @@ again:
 		break;
 	}
 end:
-	/* Make sure the writes complete before returning */
+	
 	wmb();
 	spin_unlock_irqrestore(&proc_comm_lock, flags);
 	return ret;

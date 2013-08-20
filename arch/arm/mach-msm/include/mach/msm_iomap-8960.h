@@ -23,14 +23,6 @@
 #ifndef __ASM_ARCH_MSM_IOMAP_8960_H
 #define __ASM_ARCH_MSM_IOMAP_8960_H
 
-/* Physical base address and size of peripherals.
- * Ordered by the virtual base addresses they will be mapped at.
- *
- * If you add or remove entries here, you'll want to edit the
- * msm_io_desc array in arch/arm/mach-msm/io.c to reflect your
- * changes.
- *
- */
 
 #define MSM8960_TMR_PHYS		0x0200A000
 #define MSM8960_TMR_SIZE		SZ_4K
@@ -105,5 +97,9 @@
 
 #define MSM8960_QFPROM_PHYS		0x00700000
 #define MSM8960_QFPROM_SIZE		SZ_4K
+
+#ifndef __ASSEMBLY__
+extern void msm_map_msm8960_io(void);
+#endif
 
 #endif

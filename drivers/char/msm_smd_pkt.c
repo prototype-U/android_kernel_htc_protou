@@ -9,11 +9,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
- * 02110-1301, USA.
- *
  */
 /*
  * SMD Packet Driver -- Provides userspace interface to SMD packet ports.
@@ -379,9 +374,8 @@ static int __init smd_pkt_init(void)
 	for (i = 0; i < NUM_SMD_PKT_PORTS; ++i) {
 		smd_pkt_devp[i] = kzalloc(sizeof(struct smd_pkt_dev),
 					  GFP_KERNEL);
-		if (IS_ERR(smd_pkt_devp[i])) {
-			r = PTR_ERR(smd_pkt_devp[i]);
-			pr_err("kmalloc() failed %d\n", r);
+		if (!smd_pkt_devp[i]) {
+			pr_err("kmalloc() failed\n");
 			goto clean_cdevs;
 		}
 

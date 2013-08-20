@@ -83,11 +83,11 @@ static ssize_t vol_wakeup_show(struct device *dev,
 static DEVICE_ATTR(vol_wakeup, 0664, vol_wakeup_show, vol_wakeup_store);
 
 enum {
-	DEBOUNCE_UNSTABLE     = BIT(0),	/* Got irq, while debouncing */
+	DEBOUNCE_UNSTABLE     = BIT(0),	
 	DEBOUNCE_PRESSED      = BIT(1),
 	DEBOUNCE_NOTPRESSED   = BIT(2),
-	DEBOUNCE_WAIT_IRQ     = BIT(3),	/* Stable irq state */
-	DEBOUNCE_POLL         = BIT(4),	/* Stable polling state */
+	DEBOUNCE_WAIT_IRQ     = BIT(3),	
+	DEBOUNCE_POLL         = BIT(4),	
 
 	DEBOUNCE_UNKNOWN =
 		DEBOUNCE_PRESSED | DEBOUNCE_NOTPRESSED,
@@ -96,25 +96,17 @@ enum {
 struct gpio_key_state {
 	struct gpio_input_state *ds;
 	uint8_t debounce;
-#ifdef CONFIG_MFD_MAX8957
-	struct work_struct work;
-#endif
 };
 
 struct gpio_input_state {
 	int debug_log;
 	struct gpio_event_input_devs *input_devs;
 	const struct gpio_event_input_info *info;
-#ifndef CONFIG_MFD_MAX8957
 	struct hrtimer timer;
-#endif
 	int use_irq;
 	int debounce_count;
 	spinlock_t irq_lock;
 	struct wake_lock wake_lock;
-#ifdef CONFIG_MFD_MAX8957
-	struct wake_lock key_pressed_wake_lock;
-#endif
 	struct gpio_key_state key_state[0];
 };
 
@@ -166,7 +158,6 @@ static void handle_power_key_led(unsigned int code, int value)
 }
 #endif
 
-#ifndef CONFIG_MFD_MAX8957
 static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 {
 	int i;
@@ -201,7 +192,7 @@ static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 			debounce = key_state->debounce = DEBOUNCE_UNKNOWN;
 			enable_irq(gpio_to_irq(key_entry->gpio));
 			if (gpio_flags & GPIOEDF_PRINT_KEY_UNSTABLE)
-				KEY_LOGD("gpio_keys_scan_keys: key %x-%x, %d "
+				KEY_LOGI("gpio_keys_scan_keys: key %x-%x, %d "
 					"(%d) continue debounce\n",
 					ds->info->type, key_entry->code,
 					i, key_entry->gpio);
@@ -213,7 +204,7 @@ static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 				ds->debounce_count++;
 				key_state->debounce = DEBOUNCE_UNKNOWN;
 				if (gpio_flags & GPIOEDF_PRINT_KEY_DEBOUNCE)
-					KEY_LOGD("gpio_keys_scan_keys: key %x-"
+					KEY_LOGI("gpio_keys_scan_keys: key %x-"
 						"%x, %d (%d) start debounce\n",
 						ds->info->type, key_entry->code,
 						i, key_entry->gpio);
@@ -222,7 +213,7 @@ static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 		}
 		if (pressed && (debounce & DEBOUNCE_NOTPRESSED)) {
 			if (gpio_flags & GPIOEDF_PRINT_KEY_DEBOUNCE)
-				KEY_LOGD("gpio_keys_scan_keys: key %x-%x, %d "
+				KEY_LOGI("gpio_keys_scan_keys: key %x-%x, %d "
 					"(%d) debounce pressed 1\n",
 					ds->info->type, key_entry->code,
 					i, key_entry->gpio);
@@ -231,21 +222,21 @@ static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 		}
 		if (!pressed && (debounce & DEBOUNCE_PRESSED)) {
 			if (gpio_flags & GPIOEDF_PRINT_KEY_DEBOUNCE)
-				KEY_LOGD("gpio_keys_scan_keys: key %x-%x, %d "
+				KEY_LOGI("gpio_keys_scan_keys: key %x-%x, %d "
 					"(%d) debounce pressed 0\n",
 					ds->info->type, key_entry->code,
 					i, key_entry->gpio);
 			key_state->debounce = DEBOUNCE_NOTPRESSED;
 			continue;
 		}
-		/* key is stable */
+		
 		ds->debounce_count--;
 		if (ds->use_irq)
 			key_state->debounce |= DEBOUNCE_WAIT_IRQ;
 		else
 			key_state->debounce |= DEBOUNCE_POLL;
 		if (gpio_flags & GPIOEDF_PRINT_KEYS)
-			KEY_LOGD("gpio_keys_scan_keys: key %x-%x, %d (%d) "
+			KEY_LOGI("gpio_keys_scan_keys: key %x-%x, %d (%d) "
 				"changed to %d\n", ds->info->type,
 				key_entry->code, i, key_entry->gpio, pressed);
 #ifdef CONFIG_POWER_KEY_LED
@@ -280,59 +271,6 @@ static enum hrtimer_restart gpio_event_input_timer_func(struct hrtimer *timer)
 
 	return HRTIMER_NORESTART;
 }
-#endif
-
-#ifdef CONFIG_MFD_MAX8957
-void keypad_report_keycode(struct gpio_key_state *ks)
-{
-	struct gpio_input_state *ds = ks->ds;
-	int keymap_index;
-	const struct gpio_event_direct_entry *key_entry;
-	int pressed;
-
-	if (ds == NULL) {
-		KEY_LOGE("%s, (ds == NULL) failed\n", __func__);
-		return;
-	}
-	keymap_index = ks - ds->key_state;
-
-	key_entry = &ds->info->keymap[keymap_index];
-	if (key_entry == NULL) {
-		KEY_LOGE("%s, (key_entry == NULL) failed\n", __func__);
-		return;
-	}
-
-	pressed = gpio_get_value(key_entry->gpio) ^
-			!(ds->info->flags & GPIOEDF_ACTIVE_HIGH);
-
-	if (key_entry->code == KEY_POWER) {
-		if (pressed)
-			wake_lock(&ds->key_pressed_wake_lock);
-		else
-			wake_unlock(&ds->key_pressed_wake_lock);
-	}
-
-	if (ds->info->flags & GPIOEDF_PRINT_KEYS)
-		KEY_LOGD("%s: key %d-%d, %d "
-			"(%d) changed to %d\n", __func__,
-			ds->info->type, key_entry->code, keymap_index,
-			key_entry->gpio, pressed);
-
-#ifdef CONFIG_POWER_KEY_LED
-	handle_power_key_led(key_entry->code, pressed);
-#endif
-
-	input_event(ds->input_devs->dev[key_entry->dev],
-			ds->info->type, key_entry->code, pressed);
-	input_sync(ds->input_devs->dev[key_entry->dev]);
-}
-
-static void keypad_do_work(struct work_struct *w)
-{
-	struct gpio_key_state *ks = container_of(w, struct gpio_key_state, work);
-	keypad_report_keycode(ks);
-}
-#endif
 
 static irqreturn_t gpio_event_input_irq_handler(int irq, void *dev_id)
 {
@@ -341,10 +279,8 @@ static irqreturn_t gpio_event_input_irq_handler(int irq, void *dev_id)
 	int keymap_index = ks - ds->key_state;
 	const struct gpio_event_direct_entry *key_entry;
 	unsigned long irqflags;
-#ifndef CONFIG_MFD_MAX8957
 	int pressed;
-#endif
-	KEY_LOGD("%s, irq=%d, use_irq=%d\n", __func__, irq, ds->use_irq);
+	KEY_LOGI("%s, irq=%d, use_irq=%d\n", __func__, irq, ds->use_irq);
 
 	if (!ds->use_irq)
 		return IRQ_HANDLED;
@@ -357,11 +293,9 @@ static irqreturn_t gpio_event_input_irq_handler(int irq, void *dev_id)
 			ks->debounce = DEBOUNCE_UNKNOWN;
 			if (ds->debounce_count++ == 0) {
 				wake_lock(&ds->wake_lock);
-#ifndef CONFIG_MFD_MAX8957
 				hrtimer_start(
 					&ds->timer, ds->info->debounce_time,
 					HRTIMER_MODE_REL);
-#endif
 			}
 			if (ds->info->flags & GPIOEDF_PRINT_KEY_DEBOUNCE)
 				KEY_LOGD("gpio_event_input_irq_handler: "
@@ -374,20 +308,16 @@ static irqreturn_t gpio_event_input_irq_handler(int irq, void *dev_id)
 		}
 		spin_unlock_irqrestore(&ds->irq_lock, irqflags);
 	} else {
-#ifdef CONFIG_MFD_MAX8957
-		queue_work(ki_queue, &ks->work);
-#else
 		pressed = gpio_get_value(key_entry->gpio) ^
 			!(ds->info->flags & GPIOEDF_ACTIVE_HIGH);
 		if (ds->info->flags & GPIOEDF_PRINT_KEYS)
-			KEY_LOGD("gpio_event_input_irq_handler: key %x-%x, %d "
+			KEY_LOGI("gpio_event_input_irq_handler: key %x-%x, %d "
 				"(%d) changed to %d\n",
 				ds->info->type, key_entry->code, keymap_index,
 				key_entry->gpio, pressed);
 		input_event(ds->input_devs->dev[key_entry->dev], ds->info->type,
 			    key_entry->code, pressed);
 		input_sync(ds->input_devs->dev[key_entry->dev]);
-#endif
 	}
 	return IRQ_HANDLED;
 }
@@ -403,10 +333,6 @@ static int gpio_event_input_request_irqs(struct gpio_input_state *ds)
 		err = irq = gpio_to_irq(ds->info->keymap[i].gpio);
 		if (err < 0)
 			goto err_gpio_get_irq_num_failed;
-#ifdef CONFIG_MFD_MAX8957
-		INIT_WORK(&ds->key_state[i].work, keypad_do_work);
-		queue_work(ki_queue, &ds->key_state[i].work);
-#endif
 		err = request_any_context_irq(irq, gpio_event_input_irq_handler,
 				  req_flags, "gpio_keys", &ds->key_state[i]);
 		if (err < 0) {
@@ -453,9 +379,7 @@ int gpio_event_input_func(struct gpio_event_input_devs *input_devs,
 		if (ds->use_irq)
 			for (i = 0; i < di->keymap_size; i++)
 				disable_irq(gpio_to_irq(di->keymap[i].gpio));
-#ifndef CONFIG_MFD_MAX8957
 		hrtimer_cancel(&ds->timer);
-#endif
 		return 0;
 	}
 	if (func == GPIO_EVENT_FUNC_RESUME) {
@@ -463,9 +387,7 @@ int gpio_event_input_func(struct gpio_event_input_devs *input_devs,
 		if (ds->use_irq)
 			for (i = 0; i < di->keymap_size; i++)
 				enable_irq(gpio_to_irq(di->keymap[i].gpio));
-#ifndef CONFIG_MFD_MAX8957
 		hrtimer_start(&ds->timer, ktime_set(0, 0), HRTIMER_MODE_REL);
-#endif
 		spin_unlock_irqrestore(&ds->irq_lock, irqflags);
 		return 0;
 	}
@@ -486,13 +408,7 @@ int gpio_event_input_func(struct gpio_event_input_devs *input_devs,
 		ds->input_devs = input_devs;
 		ds->info = di;
 		wake_lock_init(&ds->wake_lock, WAKE_LOCK_SUSPEND, "gpio_input");
-#ifdef CONFIG_MFD_MAX8957
-		wake_lock_init(&ds->key_pressed_wake_lock, WAKE_LOCK_SUSPEND, "pwr_key_pressed");
-#endif
 		spin_lock_init(&ds->irq_lock);
-/*                if (board_build_flag() == 0)*/
-/*                        ds->debug_log = 0;*/
-/*                else*/
 			ds->debug_log = 1;
 
 		for (i = 0; i < di->keymap_size; i++) {
@@ -527,25 +443,23 @@ int gpio_event_input_func(struct gpio_event_input_devs *input_devs,
 			}
 		}
 
-		if (di->setup_input_gpio)
-			di->setup_input_gpio();
-#ifdef CONFIG_MFD_MAX8957
-		ki_queue = create_singlethread_workqueue("ki_queue");
-#endif
-
-		ret = gpio_event_input_request_irqs(ds);
-
 		keyboard_kobj = kobject_create_and_add("keyboard", NULL);
 		if (keyboard_kobj == NULL) {
 			KEY_LOGE("KEY_ERR: %s: subsystem_register failed\n", __func__);
 			ret = -ENOMEM;
 			return ret;
 		}
-		if (sysfs_create_file(keyboard_kobj, &dev_attr_vol_wakeup.attr))
+		ret = sysfs_create_file(keyboard_kobj, &dev_attr_vol_wakeup.attr);
+		if (ret)
 			KEY_LOGE("KEY_ERR: %s: sysfs_create_file "
 					"return %d\n", __func__, ret);
 		wakeup_bitmask = 0;
 		set_wakeup = 0;
+
+		if (di->setup_input_gpio)
+			di->setup_input_gpio();
+
+		ret = gpio_event_input_request_irqs(ds);
 
 		spin_lock_irqsave(&ds->irq_lock, irqflags);
 		ds->use_irq = ret == 0;
@@ -555,20 +469,16 @@ int gpio_event_input_func(struct gpio_event_input_devs *input_devs,
 			(input_devs->count > 1) ? "..." : "",
 			ret == 0 ? "interrupt" : "polling");
 
-#ifndef CONFIG_MFD_MAX8957
 		hrtimer_init(&ds->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		ds->timer.function = gpio_event_input_timer_func;
 		hrtimer_start(&ds->timer, ktime_set(0, 0), HRTIMER_MODE_REL);
-#endif
 		spin_unlock_irqrestore(&ds->irq_lock, irqflags);
 		return 0;
 	}
 
 	ret = 0;
 	spin_lock_irqsave(&ds->irq_lock, irqflags);
-#ifndef CONFIG_MFD_MAX8957
 	hrtimer_cancel(&ds->timer);
-#endif
 	if (ds->use_irq) {
 		for (i = di->keymap_size - 1; i >= 0; i--) {
 			free_irq(gpio_to_irq(di->keymap[i].gpio),
@@ -585,9 +495,6 @@ err_gpio_request_failed:
 	}
 err_bad_keymap:
 	wake_lock_destroy(&ds->wake_lock);
-#ifdef CONFIG_MFD_MAX8957
-	wake_lock_destroy(&ds->key_pressed_wake_lock);
-#endif
 	kfree(ds);
 err_ds_alloc_failed:
 	return ret;

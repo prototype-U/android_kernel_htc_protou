@@ -12,6 +12,7 @@
  */
 #ifndef __ARCH_ARM_MACH_MSM_BOARD_7627A__
 #define __ARCH_ARM_MACH_MSM_BOARD_7627A__
+#include <asm/setup.h>
 
 #include "pm.h"
 void __init msm7627a_init_mmc(void);
@@ -19,13 +20,13 @@ void __init msm7627a_init_mmc(void);
 void __init msm_msm7627a_allocate_memory_regions(void);
 void __init msm_fb_add_devices(void);
 
-#define MSM_RAM_CONSOLE_BASE    0x03100000 /* MSM_HTC_RAM_CONSOLE_PHYS must be the same */
+#define MSM_RAM_CONSOLE_BASE    0x03100000 
 #define MSM_RAM_CONSOLE_SIZE    MSM_HTC_RAM_CONSOLE_SIZE
 
 #define MSM_FB_BASE             0x2FB00000
 #define MSM_FB_SIZE             0x00500000
-#define MSM_PMEM_MDP_SIZE       0x2300000
-#define MSM_PMEM_ADSP_SIZE      0x3300000 /* 48 -> 51 */
+#define MSM_PMEM_MDP_SIZE       0x2F00000
+#define MSM_PMEM_ADSP_SIZE      0x3300000 
 #define MSM_PMEM_ADSP2_SIZE     0x2C0000
 #define PMEM_KERNEL_EBI1_SIZE	0x3A000
 #define MSM_PMEM_AUDIO_SIZE		0x1F4000
@@ -33,7 +34,7 @@ void __init msm_fb_add_devices(void);
 enum {
 	GPIO_EXPANDER_IRQ_BASE  = NR_MSM_IRQS + NR_GPIO_IRQS,
 	GPIO_EXPANDER_GPIO_BASE = NR_MSM_GPIOS,
-	/* SURF expander */
+	
 	GPIO_CORE_EXPANDER_BASE = GPIO_EXPANDER_GPIO_BASE,
 	GPIO_BT_SYS_REST_EN     = GPIO_CORE_EXPANDER_BASE,
 	GPIO_WLAN_EXT_POR_N,
@@ -51,7 +52,7 @@ enum {
 	GPIO_CORE_EXPANDER_IO13,
 	GPIO_CORE_EXPANDER_IO14,
 	GPIO_CORE_EXPANDER_IO15,
-	/* Camera expander */
+	
 	GPIO_CAM_EXPANDER_BASE  = GPIO_CORE_EXPANDER_BASE + 16,
 	GPIO_CAM_GP_STROBE_READY	= GPIO_CAM_EXPANDER_BASE,
 	GPIO_CAM_GP_AFBUSY,
@@ -69,7 +70,7 @@ enum {
 	QRD_GPIO_WAKE_ON_WIRELESS,
 	QRD_GPIO_BACKLIGHT_EN,
 	QRD_GPIO_NC,
-	QRD_GPIO_CAM_3MP_PWDN,      /* CAM_VGA */
+	QRD_GPIO_CAM_3MP_PWDN,      
 	QRD_GPIO_WLAN_EN,
 	QRD_GPIO_CAM_5MP_SHDN_EN,
 	QRD_GPIO_CAM_5MP_RESET,
@@ -78,6 +79,7 @@ enum {
 };
 
 #define ADSP_RPC_PROG           0x3000000a
+#if defined(CONFIG_BT) && defined(CONFIG_MARIMBA_CORE)
 
 #define FPGA_MSM_CNTRL_REG2 0x90008010
 #define BAHAMA_SLAVE_ID_FM_REG 0x02
@@ -94,54 +96,6 @@ enum {
 #define I2C_PIN_CTL       0x15
 #define I2C_NORMAL	  0x40
 
-#define PROTOU_GPIO_PS_HOLD         (25)
-
-/* Compass  */
-#define PROTOU_GPIO_GSENSORS_INT         (76)
-#define PROTOU_LAYOUTS			{ \
-		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0, -1} }, \
-		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0,  1} }, \
-		{ { -1,  0, 0}, {  0,  1, 0}, {0, 0, -1} }, \
-		{ {  1,  0, 0}, {  0,  0, 1}, {0, 1,  0} }  \
-					}
-
-#define PROTOU_GPIO_USB_ID			(42)
-#define UART1DM_RX_GPIO				(45)
-
-/* HEADSET DRIVER BEGIN */
-#define PROTOU_AUD_UART_OEz			(7)
-#define PROTOU_AUD_HP_INz			(27)
-#define PROTOU_AUD_REMO_PRESz		(114)
-#define PROTOU_AUD_2V85_EN			(116)
-#define PROTOU_AUD_UART_SEL			(119)
-#define PROTOU_AUD_UART_RX			(122)
-#define PROTOU_AUD_UART_TX			(123)
-
-/*flashlight */
-#define PROTOU_GPIO_FLASH_ENABLE	(32)
-#define PROTOU_GPIO_FLASH_SWITCH	(115)
-
-/* Camera */
-#define PROTOU_GPIO_CAM_I2C_SDA    (61)
-#define PROTOU_GPIO_CAM_I2C_SCL    (60)
-#define PROTOU_GPIO_CAM_RST        (128)
-#define PROTOU_GPIO_CAM_PWDN       (129)
-#define PROTOU_GPIO_CAM_MCLK       (15)
-#define	PROTOU_GPIO_CAMIO_1V8_EN   (12)
-#define	PROTOU_GPIO_CAM_1V8_EN     (81)
-#define	PROTOU_GPIO_CAM_ID         (4)
-/* Rawchip */
-#define	PROTOU_GPIO_RAW_RST        (111)
-#define	PROTOU_GPIO_RAW_INTR0      (85)
-#define	PROTOU_GPIO_RAW_INTR1      (49)
-#define	PROTOU_GPIO_RAW_1V2_EN     (9)
-#define	PROTOU_GPIO_RAW_1V8_EN     PROTOU_GPIO_CAM_1V8_EN
-/* CPLD */
-#define	PROTOU_GPIO_CPLD_1V8_EN    PROTOU_GPIO_CAM_1V8_EN
-#define	PROTOU_GPIO_CPLD_RST       (98)
-#define	PROTOU_GPIO_CPLD_SPI_CS    (121)
-#define	PROTOU_GPIO_CPLD_CLK       (109)
-
 struct bahama_config_register {
 	u8 reg;
 	u8 value;
@@ -157,15 +111,60 @@ struct bt_vreg_info {
 	struct regulator *reg;
 };
 
-#if defined(CONFIG_BT) && defined(CONFIG_MARIMBA_CORE)
 void __init msm7627a_bt_power_init(void);
 #endif
 
+#define PROTOU_GPIO_PS_HOLD         (25)
+
+#define PROTOU_GPIO_GSENSORS_INT         (76)
+#define PROTOU_LAYOUTS			{ \
+		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0, -1} }, \
+		{ {  0, -1, 0}, { -1,  0, 0}, {0, 0,  1} }, \
+		{ { -1,  0, 0}, {  0,  1, 0}, {0, 0, -1} }, \
+		{ {  1,  0, 0}, {  0,  0, 1}, {0, 1,  0} }  \
+					}
+
+#define PROTOU_GPIO_USB_ID			(42)
+#define UART1DM_RX_GPIO				(45)
+
+#define PROTOU_AUD_UART_OEz			(7)
+#define PROTOU_AUD_HP_INz			(27)
+#define PROTOU_AUD_REMO_PRESz		(114)
+#define PROTOU_AUD_2V85_EN			(116)
+#define PROTOU_AUD_UART_SEL			(119)
+#define PROTOU_AUD_UART_RX			(122)
+#define PROTOU_AUD_UART_TX			(123)
+
+#define PROTOU_GPIO_FLASH_ENABLE	(32)
+#define PROTOU_GPIO_FLASH_SWITCH	(115)
+
+#define PROTOU_GPIO_CAM_I2C_SDA    (61)
+#define PROTOU_GPIO_CAM_I2C_SCL    (60)
+#define PROTOU_GPIO_CAM_RST        (128)
+#define PROTOU_GPIO_CAM_PWDN       (129)
+#define PROTOU_GPIO_CAM_MCLK       (15)
+#define	PROTOU_GPIO_CAMIO_1V8_EN   (12)
+#define	PROTOU_GPIO_CAM_1V8_EN     (81)
+#define	PROTOU_GPIO_CAM_ID         (4)
+#define	PROTOU_GPIO_RAW_RST        (111)
+#define	PROTOU_GPIO_RAW_INTR0      (85)
+#define	PROTOU_GPIO_RAW_INTR1      (49)
+#define	PROTOU_GPIO_RAW_1V2_EN     (9)
+#define	PROTOU_GPIO_RAW_1V8_EN     PROTOU_GPIO_CAM_1V8_EN
+#define	PROTOU_GPIO_CPLD_1V8_EN    PROTOU_GPIO_CAM_1V8_EN
+#define	PROTOU_GPIO_CPLD_RST       (98)
+#define	PROTOU_GPIO_CPLD_SPI_CS    (121)
+#define	PROTOU_GPIO_CPLD_CLK       (109)
+
+extern struct platform_device msm_device_snd;
+extern struct platform_device msm_device_adspdec;
+extern struct platform_device msm_device_cad;
+
 void __init protou_camera_init(void);
+int lcd_camera_power_onoff(int on);
 
 void __init msm7627a_add_io_devices(void);
 void __init qrd7627a_add_io_devices(void);
 int __init protou_init_panel(void);
-
 extern int panel_type;
 #endif

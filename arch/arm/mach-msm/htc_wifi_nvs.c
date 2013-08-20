@@ -1,6 +1,6 @@
 /* arch/arm/mach-msm/htc_wifi_nvs.c
  *
- * Code to extract WiFi calibration information from ATAG set up
+ * Code to extract WiFi calibration information from ATAG set up 
  * by the bootloader.
  *
  * Copyright (C) 2008 Google, Inc.
@@ -20,12 +20,13 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/string.h>
+#include <linux/export.h>
 #include <linux/proc_fs.h>
 
 #include <asm/setup.h>
 
-/* configuration tags specific to msm */
-#define ATAG_MSM_WIFI	0x57494649 /* MSM WiFi */
+#define ATAG_MSM_WIFI	0x57494649 
 
 #define NVS_MAX_SIZE	0x800U
 #define NVS_LEN_OFFSET	0x0C
@@ -35,11 +36,26 @@ static unsigned char wifi_nvs_ram[NVS_MAX_SIZE];
 static struct proc_dir_entry *wifi_calibration;
 static struct proc_dir_entry *wifi_data;
 
-unsigned char *get_wifi_nvs_ram(void)
+unsigned char *get_wifi_nvs_ram( void )
 {
-	return wifi_nvs_ram;
+	return( wifi_nvs_ram );
 }
 EXPORT_SYMBOL(get_wifi_nvs_ram);
+
+unsigned char* wlan_random_mac(unsigned char *set_mac_addr)
+{
+    static unsigned char mac_addr[6]={0,0,0,0,0,0};
+    if(set_mac_addr != NULL){
+        mac_addr[0]=set_mac_addr[0];
+        mac_addr[1]=set_mac_addr[1];
+        mac_addr[2]=set_mac_addr[2];
+        mac_addr[3]=set_mac_addr[3];
+        mac_addr[4]=set_mac_addr[4];
+        mac_addr[5]=set_mac_addr[5];
+    }
+    return mac_addr;
+}
+EXPORT_SYMBOL(wlan_random_mac);
 
 static int __init parse_tag_msm_wifi(const struct tag *tag)
 {
@@ -51,23 +67,24 @@ static int __init parse_tag_msm_wifi(const struct tag *tag)
 
 	size = min((tag->hdr.size - 2) * sizeof(__u32), NVS_MAX_SIZE);
 #ifdef ATAG_MSM_WIFI_DEBUG
-	printk(KERN_INFO "WiFi Data size = %d , 0x%x\n", tag->hdr.size, tag->hdr.tag);
-	for (i = 0 ; i < size ; i++)
-		printk(KERN_INFO "%02x ", *dptr++);
-#endif
+	printk("WiFi Data size = %d , 0x%x\n", tag->hdr.size, tag->hdr.tag);
+	for(i=0;( i < size );i++) {
+		printk("%02x ", *dptr++);
+	}
+#endif	
 	memcpy(wifi_nvs_ram, dptr, size);
 	return 0;
 }
 
 __tagtable(ATAG_MSM_WIFI, parse_tag_msm_wifi);
 
-static unsigned wifi_get_nvs_size(void)
+static unsigned wifi_get_nvs_size( void )
 {
 	unsigned char *ptr;
 	unsigned len;
 
 	ptr = get_wifi_nvs_ram();
-	/* Size in format LE assumed */
+	
 	memcpy(&len, ptr + NVS_LEN_OFFSET, sizeof(len));
 	len = min(len, (NVS_MAX_SIZE - NVS_DATA_OFFSET));
 	return len;
@@ -80,7 +97,6 @@ int wifi_calibration_size_set(void)
 	return 0;
 }
 
-#ifdef CONFIG_WIFI_NVS_PROC_CREATE
 static int wifi_calibration_read_proc(char *page, char **start, off_t off,
 					int count, int *eof, void *data)
 {
@@ -92,7 +108,6 @@ static int wifi_calibration_read_proc(char *page, char **start, off_t off,
 	memcpy(page, ptr + NVS_DATA_OFFSET, len);
 	return len;
 }
-#endif
 
 static int wifi_data_read_proc(char *page, char **start, off_t off,
 					int count, int *eof, void *data)
@@ -106,14 +121,13 @@ static int wifi_data_read_proc(char *page, char **start, off_t off,
 
 static int __init wifi_nvs_init(void)
 {
-#ifdef CONFIG_WIFI_NVS_PROC_CREATE
 	wifi_calibration = create_proc_entry("calibration", 0444, NULL);
 	if (wifi_calibration != NULL) {
 		wifi_calibration->size = wifi_get_nvs_size();
 		wifi_calibration->read_proc = wifi_calibration_read_proc;
 		wifi_calibration->write_proc = NULL;
 	}
-#endif
+
 	wifi_data = create_proc_entry("wifi_data", 0444, NULL);
 	if (wifi_data != NULL) {
 		wifi_data->size = NVS_DATA_OFFSET;

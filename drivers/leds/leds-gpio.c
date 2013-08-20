@@ -13,20 +13,13 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
+#include <linux/gpio.h>
 #include <linux/leds.h>
 #include <linux/of_platform.h>
 #include <linux/of_gpio.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
-
-#include <asm/gpio.h>
-
-#define LED_DBG(fmt, ...) \
-		({ if (0) printk(KERN_DEBUG "[LED]" fmt, ##__VA_ARGS__); })
-#define LED_INFO(fmt, ...) \
-		printk(KERN_INFO "[LED]" fmt, ##__VA_ARGS__)
-#define LED_ERR(fmt, ...) \
-		printk(KERN_ERR "[LED][ERR]" fmt, ##__VA_ARGS__)
+#include <linux/module.h>
 
 struct gpio_led_data {
 	struct led_classdev cdev;
@@ -60,7 +53,6 @@ static void gpio_led_set(struct led_classdev *led_cdev,
 	struct gpio_led_data *led_dat =
 		container_of(led_cdev, struct gpio_led_data, cdev);
 	int level;
-	LED_INFO("%s value: %d\n", __func__,value);
 
 	if (value == LED_OFF)
 		level = 0;
@@ -70,10 +62,6 @@ static void gpio_led_set(struct led_classdev *led_cdev,
 	if (led_dat->active_low)
 		level = !level;
 
-	/* Setting GPIOs with I2C/etc requires a task context, and we don't
-	 * seem to have a reliable way to know if we're already in one; so
-	 * let's just assume the worst.
-	 */
 	if (led_dat->can_sleep) {
 		led_dat->new_level = level;
 		schedule_work(&led_dat->work);
@@ -92,7 +80,6 @@ static int gpio_blink_set(struct led_classdev *led_cdev,
 {
 	struct gpio_led_data *led_dat =
 		container_of(led_cdev, struct gpio_led_data, cdev);
-	LED_INFO("%s delay on: %lu, delay off: %lu\n", __func__, *delay_on, *delay_off);
 
 	led_dat->blinking = 1;
 	return led_dat->platform_gpio_blink_set(led_dat->gpio, GPIO_LED_BLINK,
@@ -104,11 +91,10 @@ static int __devinit create_gpio_led(const struct gpio_led *template,
 	int (*blink_set)(unsigned, int, unsigned long *, unsigned long *))
 {
 	int ret, state;
-	LED_INFO("%s \n", __func__);
 
 	led_dat->gpio = -1;
 
-	/* skip leds that aren't available */
+	
 	if (!gpio_is_valid(template->gpio)) {
 		printk(KERN_INFO "Skipping unavailable LED gpio %d (%s)\n",
 				template->gpio, template->name);
@@ -131,7 +117,7 @@ static int __devinit create_gpio_led(const struct gpio_led *template,
 	}
 	led_dat->cdev.brightness_set = gpio_led_set;
 	if (template->default_state == LEDS_GPIO_DEFSTATE_KEEP)
-		state = !!gpio_get_value(led_dat->gpio) ^ led_dat->active_low;
+		state = !!gpio_get_value_cansleep(led_dat->gpio) ^ led_dat->active_low;
 	else
 		state = (template->default_state == LEDS_GPIO_DEFSTATE_ON);
 	led_dat->cdev.brightness = state ? LED_FULL : LED_OFF;
@@ -174,15 +160,14 @@ static inline int sizeof_gpio_leds_priv(int num_leds)
 		(sizeof(struct gpio_led_data) * num_leds);
 }
 
-/* Code to create from OpenFirmware platform devices */
-#ifdef CONFIG_LEDS_GPIO_OF
+#ifdef CONFIG_OF_GPIO
 static struct gpio_leds_priv * __devinit gpio_leds_create_of(struct platform_device *pdev)
 {
 	struct device_node *np = pdev->dev.of_node, *child;
 	struct gpio_leds_priv *priv;
 	int count = 0, ret;
 
-	/* count LEDs in this device, so we know how much to allocate */
+	
 	for_each_child_of_node(np, child)
 		count++;
 	if (!count)
@@ -233,13 +218,13 @@ static const struct of_device_id of_gpio_leds_match[] = {
 	{ .compatible = "gpio-leds", },
 	{},
 };
-#else
+#else 
 static struct gpio_leds_priv * __devinit gpio_leds_create_of(struct platform_device *pdev)
 {
 	return NULL;
 }
 #define of_gpio_leds_match NULL
-#endif
+#endif 
 
 
 static int __devinit gpio_led_probe(struct platform_device *pdev)
@@ -247,6 +232,7 @@ static int __devinit gpio_led_probe(struct platform_device *pdev)
 	struct gpio_led_platform_data *pdata = pdev->dev.platform_data;
 	struct gpio_leds_priv *priv;
 	int i, ret = 0;
+
 	if (pdata && pdata->num_leds) {
 		priv = kzalloc(sizeof_gpio_leds_priv(pdata->num_leds),
 				GFP_KERNEL);
@@ -259,8 +245,7 @@ static int __devinit gpio_led_probe(struct platform_device *pdev)
 					      &priv->leds[i],
 					      &pdev->dev, pdata->gpio_blink_set);
 			if (ret < 0) {
-				/* On failure: unwind the led creations */
-				LED_ERR("%s create led fail\n", __func__);
+				
 				for (i = i - 1; i >= 0; i--)
 					delete_gpio_led(&priv->leds[i]);
 				kfree(priv);
@@ -274,7 +259,6 @@ static int __devinit gpio_led_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, priv);
-	LED_INFO("%s probe success\n", __func__);
 
 	return 0;
 }
@@ -283,7 +267,6 @@ static int __devexit gpio_led_remove(struct platform_device *pdev)
 {
 	struct gpio_leds_priv *priv = dev_get_drvdata(&pdev->dev);
 	int i;
-	LED_INFO("%s \n", __func__);
 
 	for (i = 0; i < priv->num_leds; i++)
 		delete_gpio_led(&priv->leds[i]);
@@ -304,21 +287,9 @@ static struct platform_driver gpio_led_driver = {
 	},
 };
 
-MODULE_ALIAS("platform:leds-gpio");
-
-static int __init gpio_led_init(void)
-{
-	return platform_driver_register(&gpio_led_driver);
-}
-
-static void __exit gpio_led_exit(void)
-{
-	platform_driver_unregister(&gpio_led_driver);
-}
-
-module_init(gpio_led_init);
-module_exit(gpio_led_exit);
+module_platform_driver(gpio_led_driver);
 
 MODULE_AUTHOR("Raphael Assenat <raph@8d.com>, Trent Piepho <tpiepho@freescale.com>");
 MODULE_DESCRIPTION("GPIO LED driver");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:leds-gpio");

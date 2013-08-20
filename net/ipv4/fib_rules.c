@@ -26,6 +26,7 @@
 #include <linux/init.h>
 #include <linux/list.h>
 #include <linux/rcupdate.h>
+#include <linux/export.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <net/tcp.h>
@@ -66,6 +67,7 @@ int fib_lookup(struct net *net, struct flowi4 *flp, struct fib_result *res)
 
 	return err;
 }
+EXPORT_SYMBOL_GPL(fib_lookup);
 
 static int fib4_rule_action(struct fib_rule *rule, struct flowi *flp,
 			    int flags, struct fib_lookup_arg *arg)
@@ -237,9 +239,9 @@ nla_put_failure:
 
 static size_t fib4_rule_nlmsg_payload(struct fib_rule *rule)
 {
-	return nla_total_size(4) /* dst */
-	       + nla_total_size(4) /* src */
-	       + nla_total_size(4); /* flow */
+	return nla_total_size(4) 
+	       + nla_total_size(4) 
+	       + nla_total_size(4); 
 }
 
 static void fib4_rule_flush_cache(struct fib_rules_ops *ops)
@@ -296,7 +298,7 @@ int __net_init fib4_rules_init(struct net *net)
 	return 0;
 
 fail:
-	/* also cleans all rules already added */
+	
 	fib_rules_unregister(ops);
 	return err;
 }

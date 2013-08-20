@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2008 Google, Inc.
  * Copyright (C) 2008 HTC Corporation
- * Copyright (c) 2012 Code Aurora Forum. All rights reserved.
+ * Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -28,17 +28,21 @@
 #include <linux/debugfs.h>
 #include <linux/delay.h>
 #include <linux/wakelock.h>
+#include <linux/pm_qos.h>
 
 #include <linux/msm_audio.h>
 
 #include <asm/atomic.h>
 #include <asm/ioctls.h>
 #include <mach/msm_adsp.h>
+#include <mach/cpuidle.h>
 
 #include "audmgr.h"
 
+#include <mach/qdsp5/audio_acdb_def.h>
 #include <mach/qdsp5/qdsp5audppcmdi.h>
 #include <mach/qdsp5/qdsp5audppmsg.h>
+#include <mach/qdsp5/qdsp5audpp.h>
 
 #include <mach/htc_pwrsink.h>
 #include <mach/debug_mm.h>
@@ -141,7 +145,7 @@ struct audio {
 
 	uint8_t out_head;
 	uint8_t out_tail;
-	uint8_t out_needed; /* number of buffers the dsp is waiting for */
+	uint8_t out_needed; 
 
 	atomic_t out_bytes;
 
@@ -149,7 +153,7 @@ struct audio {
 	struct mutex write_lock;
 	wait_queue_head_t wait;
 
-	/* configuration to use on next enable */
+	
 	uint32_t out_sample_rate;
 	uint32_t out_channel_mode;
 	uint32_t out_weight;
@@ -157,18 +161,18 @@ struct audio {
 
 	struct audmgr audmgr;
 
-	/* data allocated for various buffers */
+	
 	char *data;
 	dma_addr_t phys;
 
-	int teos; /* valid only if tunnel mode & no data left for decoder */
+	int teos; 
 	int opened;
 	int enabled;
 	int running;
-	int stopped; /* set when stopped, cleared on flush */
+	int stopped; 
 
 	struct wake_lock wakelock;
-	struct wake_lock idlelock;
+	struct pm_qos_request pm_qos_req;
 
 	audpp_cmd_cfg_object_params_volume vol_pan;
 };
@@ -218,13 +222,14 @@ static void audio_prevent_sleep(struct audio *audio)
 	printk(KERN_INFO "++++++++++++++++++++++++++++++\n");
 	AUDIO_LOG("AUDIO PLAYBACK START");
 	wake_lock(&audio->wakelock);
-	wake_lock(&audio->idlelock);
+	pm_qos_update_request(&audio->pm_qos_req,
+			      msm_cpuidle_get_deep_idle_latency());
 }
 
 static void audio_allow_sleep(struct audio *audio)
 {
+	pm_qos_update_request(&audio->pm_qos_req, PM_QOS_DEFAULT_VALUE);
 	wake_unlock(&audio->wakelock);
-	wake_unlock(&audio->idlelock);
 	AUDIO_LOG("AUDIO PLAYBACK OFF");
 	printk(KERN_INFO "------------------------------\n");
 }
@@ -235,7 +240,6 @@ static int audio_dsp_send_buffer(struct audio *audio,
 
 static void audio_dsp_event(void *private, unsigned id, uint16_t *msg);
 static int audio_enable_srs_trumedia(struct audio_copp *audio_copp, int enable);
-/* must be called with audio->lock held */
 static int audio_enable(struct audio *audio)
 {
 	struct audmgr_config cfg;
@@ -246,13 +250,10 @@ static int audio_enable(struct audio *audio)
 	if (audio->enabled)
 		return 0;	
 
-	/* refuse to start if we're not ready */
+	
 	if (!audio->out[0].used || !audio->out[1].used)
 		return -EIO;
 
-	/* we start buffers 0 and 1, so buffer 0 will be the
-	 * next one the dsp will want
-	 */
 	audio->out_tail = 0;
 	audio->out_needed = 0;
 
@@ -281,10 +282,9 @@ static int audio_enable(struct audio *audio)
 	return 0;
 }
 
-/* must be called with audio->lock held */
 static int audio_disable(struct audio *audio)
 {
-	MM_DBG("\n"); /* Macro prints the file name and function */
+	MM_DBG("\n"); 
 	if (audio->enabled) {
 		MM_AUD_INFO("audio_disable()\n");
 		audio->enabled = 0;
@@ -312,24 +312,24 @@ void audio_commit_pending_pp_params(void *priv, unsigned id, uint16_t *msg)
 	if (!audio_copp->status)
 		return;
 
-	audpp_dsp_set_mbadrc(COMMON_OBJ_ID, audio_copp->mbadrc_enable,
+	if (!is_acdb_enabled()) {
+		audpp_dsp_set_mbadrc(COMMON_OBJ_ID, audio_copp->mbadrc_enable,
 						&audio_copp->mbadrc);
 
-	audpp_dsp_set_eq(COMMON_OBJ_ID, audio_copp->eq_enable,
+		audpp_dsp_set_eq(COMMON_OBJ_ID, audio_copp->eq_enable,
 						&audio_copp->eq);
-
-	audpp_dsp_set_rx_iir(COMMON_OBJ_ID, audio_copp->rx_iir_enable,
+		audpp_dsp_set_rx_iir(COMMON_OBJ_ID, audio_copp->rx_iir_enable,
 							&audio_copp->iir);
-	audpp_dsp_set_vol_pan(COMMON_OBJ_ID, &audio_copp->vol_pan);
+		audpp_dsp_set_vol_pan(COMMON_OBJ_ID, &audio_copp->vol_pan);
 
-	audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID,
+		audpp_dsp_set_qconcert_plus(COMMON_OBJ_ID,
 				audio_copp->qconcert_plus_enable,
 				&audio_copp->qconcert_plus);
+	}
 	audio_enable_srs_trumedia(audio_copp, true);
 }
 EXPORT_SYMBOL(audio_commit_pending_pp_params);
 
-/* ------------------- dsp --------------------- */
 static void audio_dsp_event(void *private, unsigned id, uint16_t *msg)
 {
 	struct audio *audio = private;
@@ -343,7 +343,7 @@ static void audio_dsp_event(void *private, unsigned id, uint16_t *msg)
 		unsigned idx = msg[3] - 1;
 		int rc;
 
-		/* MM_INFO("HOST_PCM id %d idx %d\n", id, idx); */
+		
 		if (id != AUDPP_MSG_HOSTPCM_ID_ARM_RX) {
 			MM_AUD_ERR("bogus id\n");
 			break;
@@ -428,6 +428,7 @@ static int audio_dsp_out_enable(struct audio *audio, int yes)
 		cmd.sample_rate		= audio->out_sample_rate;
 		cmd.channel_mode	= audio->out_channel_mode;
 	}
+	
 	return audpp_send_queue2(&cmd, sizeof(cmd));
 }
 
@@ -449,7 +450,6 @@ static int audio_dsp_send_buffer(struct audio *audio,
 	return audpp_send_queue2(&cmd, sizeof(cmd));
 }
 
-/* ------------------- device --------------------- */
 
 static int audio_enable_mbadrc(struct audio_copp *audio_copp, int enable)
 {
@@ -607,11 +607,6 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	case AUDIO_FLUSH:
 		if (audio->stopped) {
-			/* Make sure we're stopped and we wake any threads
-			 * that might be blocked holding the write_lock.
-			 * While audio->stopped write threads will always
-			 * exit immediately.
-			 */
 			wake_up(&audio->wait);
 			mutex_lock(&audio->write_lock);
 			audio_flush(audio);
@@ -645,17 +640,19 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		config.buffer_size = BUFSZ;
 		config.buffer_count = 2;
 		config.sample_rate = audio->out_sample_rate;
-		if (audio->out_channel_mode == AUDPP_CMD_PCM_INTF_MONO_V)
+		if (audio->out_channel_mode == AUDPP_CMD_PCM_INTF_MONO_V) {
 			config.channel_count = 1;
-		else
+		} else {
 			config.channel_count = 2;
+		}
 		config.unused[0] = 0;
 		config.unused[1] = 0;
 		config.unused[2] = 0;
-		if (copy_to_user((void*) arg, &config, sizeof(config)))
+		if (copy_to_user((void*) arg, &config, sizeof(config))) {
 			rc = -EFAULT;
-		else
+		} else {
 			rc = 0;
+		}
 		break;
 	}
 	default:
@@ -665,8 +662,7 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	return rc;
 }
 
-/* Only useful in tunnel-mode */
-static int audio_fsync(struct file *file,	int datasync)
+static int audio_fsync(struct file *file, loff_t a, loff_t b, int datasync)
 {
 	struct audio *audio = file->private_data;
 	int rc = 0;
@@ -683,9 +679,6 @@ static int audio_fsync(struct file *file,	int datasync)
 	if (rc < 0)
 		goto done;
 
-	/* pcm dmamiss message is sent continously when
-	 * decoder is starved so no race condition concern
-	 */
 
 	audio->teos = 0;
 
@@ -731,7 +724,7 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 
 	LOG(EV_WRITE, count | (audio->running << 28) | (audio->stopped << 24));
 
-	/* just for this write, set us real-time */
+	
 	if (!task_has_rt_policy(current)) {
 		struct cred *new = prepare_creds();
 		if (new != NULL) {
@@ -783,7 +776,7 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 
 	mutex_unlock(&audio->write_lock);
 
-	/* restore scheduling policy and priority */
+	
 	if (!rt_policy(old_policy)) {
 		struct sched_param v = { .sched_priority = old_prio };
 		if ((sched_setscheduler(current, old_policy, &v)) < 0)
@@ -807,13 +800,13 @@ static ssize_t audio_write(struct file *file, const char __user *buf,
 static int audio_release(struct inode *inode, struct file *file)
 {
 	struct audio *audio = file->private_data;
+
 	LOG(EV_OPEN, 0);
 	mutex_lock(&audio->lock);
 	audio_disable(audio);
 	audio_flush(audio);
 	audio->opened = 0;
 	mutex_unlock(&audio->lock);
-
 	return 0;
 }
 
@@ -854,6 +847,7 @@ static int audio_open(struct inode *inode, struct file *file)
 	audio->out[0].data = audio->data + 0;
 	audio->out[0].addr = audio->phys + 0;
 	audio->out[0].size = BUFSZ;
+	
 	audio->out[1].data = audio->data + BUFSZ;
 	audio->out[1].addr = audio->phys + BUFSZ;
 	audio->out[1].size = BUFSZ;
@@ -1180,7 +1174,8 @@ static int __init audio_init(void)
 	spin_lock_init(&the_audio.dsp_lock);
 	init_waitqueue_head(&the_audio.wait);
 	wake_lock_init(&the_audio.wakelock, WAKE_LOCK_SUSPEND, "audio_pcm");
-	wake_lock_init(&the_audio.idlelock, WAKE_LOCK_IDLE, "audio_pcm_idle");
+	pm_qos_add_request(&the_audio.pm_qos_req, PM_QOS_CPU_DMA_LATENCY,
+				PM_QOS_DEFAULT_VALUE);
 	return (misc_register(&audio_misc) || misc_register(&audpp_misc));
 }
 

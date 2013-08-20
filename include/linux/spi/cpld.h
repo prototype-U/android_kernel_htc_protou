@@ -5,7 +5,7 @@ struct cpld_platform_data {
 	int intf_select;
 	int cpld_power_pwd;
 	void (*power_func)(int);
-	void (*init_cpld_clk)(int);//void (*init_gpio)(void);
+	void (*init_cpld_clk)(int);
 	int (*clock_set)(int);
 	int (*switch_interface)(int);
 };
@@ -14,15 +14,8 @@ struct cpld_platform_data {
 #define GPIO_SPI 0
 #define EBI2_SPI 1
 
-/*
-This function will choose use gpio spi or EBI2 to spi.
-If fail, it will return -1, or return 0
-*/
 int spi_set_route(int path);
 
-/*
-If fail, it will return -1, or return 0
-*/
 int cpld_open_init(void);
 int cpld_release(void);
 

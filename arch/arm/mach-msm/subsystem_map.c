@@ -38,8 +38,10 @@ static unsigned long subsystem_to_domain_tbl[] = {
 	VIDEO_DOMAIN,
 	VIDEO_DOMAIN,
 	CAMERA_DOMAIN,
-	DISPLAY_DOMAIN,
-	ROTATOR_DOMAIN,
+	DISPLAY_READ_DOMAIN,
+	DISPLAY_WRITE_DOMAIN,
+	ROTATOR_SRC_DOMAIN,
+	ROTATOR_DST_DOMAIN,
 	0xFFFFFFFF
 };
 
@@ -247,9 +249,6 @@ phys_addr_t msm_subsystem_check_iova_mapping(int subsys_id, unsigned long iova)
 	struct iommu_domain *subsys_domain;
 
 	if (!msm_use_iommu())
-		/*
-		 * If there is no iommu, Just return the iova in this case.
-		 */
 		return iova;
 
 	subsys_domain = msm_get_iommu_domain(msm_subsystem_get_domain_no
@@ -348,10 +347,6 @@ struct msm_mapped_buffer *msm_subsystem_map_buffer(unsigned long phys,
 			goto outremovephys;
 		}
 
-		/*
-		 * The alignment must be specified as the exact value wanted
-		 * e.g. 8k alignment must pass (0x2000 | other flags)
-		 */
 		min_align = flags & ~(SZ_4K - 1);
 
 		for (i = 0; i < nsubsys; i++) {
@@ -375,12 +370,13 @@ struct msm_mapped_buffer *msm_subsystem_map_buffer(unsigned long phys,
 			partition_no = msm_subsystem_get_partition_no(
 								subsys_ids[i]);
 
-			iova_start = msm_allocate_iova_address(domain_no,
+			ret = msm_allocate_iova_address(domain_no,
 						partition_no,
 						map_size,
-						max(min_align, SZ_4K));
+						max(min_align, SZ_4K),
+						&iova_start);
 
-			if (!iova_start) {
+			if (ret) {
 				pr_err("%s: could not allocate iova address\n",
 					__func__);
 				continue;
@@ -392,7 +388,7 @@ struct msm_mapped_buffer *msm_subsystem_map_buffer(unsigned long phys,
 					temp_phys += SZ_4K,
 					temp_va += SZ_4K) {
 				ret = iommu_map(d, temp_va, temp_phys,
-						get_order(SZ_4K),
+						SZ_4K,
 						(IOMMU_READ | IOMMU_WRITE));
 				if (ret) {
 					pr_err("%s: could not map iommu for"
@@ -407,7 +403,7 @@ struct msm_mapped_buffer *msm_subsystem_map_buffer(unsigned long phys,
 
 			if (flags & MSM_SUBSYSTEM_MAP_IOMMU_2X)
 				msm_iommu_map_extra
-					(d, temp_va, length,
+					(d, temp_va, length, SZ_4K,
 					(IOMMU_READ | IOMMU_WRITE));
 		}
 
@@ -427,15 +423,15 @@ struct msm_mapped_buffer *msm_subsystem_map_buffer(unsigned long phys,
 
 outiova:
 	if (flags & MSM_SUBSYSTEM_MAP_IOVA)
-		iommu_unmap(d, temp_va, get_order(SZ_4K));
+		iommu_unmap(d, temp_va, SZ_4K);
 outdomain:
 	if (flags & MSM_SUBSYSTEM_MAP_IOVA) {
-		/* Unmap the rest of the current domain, i */
+		
 		for (j -= SZ_4K, temp_va -= SZ_4K;
 			j > 0; temp_va -= SZ_4K, j -= SZ_4K)
-			iommu_unmap(d, temp_va, get_order(SZ_4K));
+			iommu_unmap(d, temp_va, SZ_4K);
 
-		/* Unmap all the other domains */
+		
 		for (i--; i >= 0; i--) {
 			unsigned int domain_no, partition_no;
 			if (!msm_use_iommu())
@@ -447,7 +443,7 @@ outdomain:
 			temp_va = buf->iova[i];
 			for (j = length; j > 0; j -= SZ_4K,
 						temp_va += SZ_4K)
-				iommu_unmap(d, temp_va, get_order(SZ_4K));
+				iommu_unmap(d, temp_va, SZ_4K);
 			msm_free_iova_address(buf->iova[i], domain_no,
 					partition_no, length);
 		}
@@ -513,7 +509,7 @@ int msm_subsystem_unmap_buffer(struct msm_mapped_buffer *buf)
 					temp_va += SZ_4K) {
 					ret = iommu_unmap(subsys_domain,
 							temp_va,
-							get_order(SZ_4K));
+							SZ_4K);
 					WARN(ret, "iommu_unmap returned a "
 						" non-zero value.\n");
 				}

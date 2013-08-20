@@ -72,11 +72,11 @@
 #define RPC_REPLY_HDR_SZ   (sizeof(uint32_t) * 3)
 #define RPC_REPLY_SZ       (sizeof(uint32_t) * 6)
 
-#define MAX_FRAME_SIZE 36 /* QCELP - 36, AMRNB - 32, EVRC - 24 */
-#define MAX_REC_BUF_COUNT 5 /* Maximum supported voc rec buffers */
+#define MAX_FRAME_SIZE 36 
+#define MAX_REC_BUF_COUNT 5 
 #define MAX_REC_BUF_SIZE (MAX_FRAME_SIZE * 10)
 #define MAX_VOICEMEMO_BUF_SIZE  \
-	((MAX_REC_BUF_SIZE)*MAX_REC_BUF_COUNT) /* 5 buffers for 200ms frame */
+	((MAX_REC_BUF_SIZE)*MAX_REC_BUF_COUNT) 
 #define MSM_AUD_BUFFER_UPDATE_WAIT_MS 2000
 
 enum rpc_voc_rec_status_type {
@@ -98,7 +98,7 @@ enum rpc_voc_rec_status_type {
 };
 
 struct rpc_snd_voc_rec_start_args {
-	uint32_t param_status; /* 1 = valid, 0 = not valid */
+	uint32_t param_status; 
 	uint32_t rec_type;
 	uint32_t rec_interval_ms;
 	uint32_t auto_stop_ms;
@@ -132,7 +132,7 @@ struct snd_voc_rec_put_buf_msg {
 
 struct snd_voc_rec_av_sync_cb_func_data {
 	uint32_t sync_cb_func_id;
-	uint32_t status;  /* Pointer status (1 = valid, 0  = invalid) */
+	uint32_t status;  
 	uint32_t num_samples;
 	uint32_t time_stamp[2];
 	uint32_t lost_samples;
@@ -141,32 +141,30 @@ struct snd_voc_rec_av_sync_cb_func_data {
 };
 
 struct snd_voc_rec_cb_func_fw_data {
-	uint32_t fw_ptr_status; /* FW Pointer status (1=valid,0=invalid) */
+	uint32_t fw_ptr_status; 
 	uint32_t rec_buffer_size;
 	uint32_t data[MAX_REC_BUF_SIZE/4];
 	uint32_t rec_buffer_size_copy;
-	uint32_t rec_num_frames; /* Number of voice frames */
-	uint32_t rec_length; /* Valid data in record buffer =
-			      * data_req_ms amount of data */
-	uint32_t client_data; /* A11 rec buffer pointer */
-	uint32_t rw_ptr_status; /* RW Pointer status (1=valid,0=invalid) */
+	uint32_t rec_num_frames; 
+	uint32_t rec_length; 
+	uint32_t client_data; 
+	uint32_t rw_ptr_status; 
 };
 
 struct snd_voc_rec_cb_func_rw_data {
-	uint32_t fw_ptr_status; /* FW Pointer status (1=valid,0=invalid) */
-	uint32_t rw_ptr_status; /* RW Pointer status (1=valid,0=invalid) */
+	uint32_t fw_ptr_status; 
+	uint32_t rw_ptr_status; 
 	uint32_t rec_buffer_size;
 	uint32_t data[MAX_REC_BUF_SIZE/4];
 	uint32_t rec_buffer_size_copy;
-	uint32_t rec_num_frames; /* Number of voice frames */
-	uint32_t rec_length; /* Valid data in record buffer =
-			      * data_req_ms amount of data */
-	uint32_t client_data; /* A11 rec buffer pointer */
+	uint32_t rec_num_frames; 
+	uint32_t rec_length; 
+	uint32_t client_data; 
 };
 
 struct snd_voc_rec_data_cb_func_data {
 	uint32_t cb_func_id;
-	uint32_t status; /* Pointer status (1 = valid, 0  = invalid) */
+	uint32_t status; 
 	uint32_t rec_status;
 
 	union {
@@ -178,14 +176,13 @@ struct snd_voc_rec_data_cb_func_data {
 struct buffer {
 	void *data;
 	unsigned size;
-	unsigned used; /* Usage actual recorded data */
+	unsigned used; 
 	unsigned addr;
 	unsigned numframes;
 };
 
 struct audio_voicememo {
-	uint32_t byte_count; /* Pass statistics to user space for
-			      * time stamping */
+	uint32_t byte_count; 
 	uint32_t frame_count;
 
 	int opened;
@@ -209,9 +206,8 @@ struct audio_voicememo {
 	char *rec_buf_ptr;
 	dma_addr_t phys;
 	uint32_t rec_buf_size;
-	uint8_t read_next;	/* index to input buffers to be read next */
-	uint8_t fill_next;	/* index to buffer that should be filled as
-				 * data comes from A9 */
+	uint8_t read_next;	
+	uint8_t fill_next;	
 
 	struct audmgr audmgr;
 
@@ -226,20 +222,20 @@ static struct audio_voicememo the_audio_voicememo;
 static int audvoicememo_validate_usr_config(
 		struct msm_audio_voicememo_config *config)
 {
-	int rc = -1; /* error */
+	int rc = -1; 
 
 	if (config->rec_type != RPC_VOC_REC_FORWARD &&
 		config->rec_type != RPC_VOC_REC_REVERSE &&
 		config->rec_type != RPC_VOC_REC_BOTH)
 		goto done;
 
-	/* QCELP, EVRC, AMR-NB only */
+	
 	if (config->capability != RPC_VOC_CAP_IS733 &&
 		config->capability != RPC_VOC_CAP_IS127 &&
 		config->capability != RPC_VOC_CAP_AMR)
 		goto done;
 
-	/* QCP, AMR format supported */
+	
 	if ((config->frame_format != RPC_VOC_PB_NATIVE_QCP) &&
 		(config->frame_format != RPC_VOC_PB_AMR))
 		goto done;
@@ -248,8 +244,6 @@ static int audvoicememo_validate_usr_config(
 		(config->capability != RPC_VOC_CAP_AMR))
 		goto done;
 
-	/* To make sure, max kernel buf size matches
-	 * with max data request time */
 	if (config->data_req_ms > ((MAX_REC_BUF_SIZE/MAX_FRAME_SIZE)*20))
 		goto done;
 
@@ -273,17 +267,12 @@ static void audvoicememo_flush_buf(struct audio_voicememo *audio)
 
 static void audvoicememo_ioport_reset(struct audio_voicememo *audio)
 {
-	/* Make sure read/write thread are free from
-	 * sleep and knowing that system is not able
-	 * to process io request at the moment
-	 */
 	wake_up(&audio->read_wait);
 	mutex_lock(&audio->read_lock);
 	audvoicememo_flush_buf(audio);
 	mutex_unlock(&audio->read_lock);
 }
 
-/* must be called with audio->lock held */
 static int audvoicememo_enable(struct audio_voicememo *audio)
 {
 	struct audmgr_config cfg;
@@ -296,7 +285,7 @@ static int audvoicememo_enable(struct audio_voicememo *audio)
 	if (audio->enabled)
 		return 0;
 
-	/* Codec / method configure to audmgr client */
+	
 	cfg.tx_rate = RPC_AUD_DEF_SAMPLE_RATE_8000;
 	cfg.rx_rate = RPC_AUD_DEF_SAMPLE_RATE_NONE;
 	cfg.def_method = RPC_AUD_DEF_METHOD_RECORD;
@@ -306,7 +295,7 @@ static int audvoicememo_enable(struct audio_voicememo *audio)
 	else if (audio->voicememo_cfg.capability == RPC_VOC_CAP_IS127)
 		cfg.codec = RPC_AUD_DEF_CODEC_VOC_EVRC;
 	else
-		cfg.codec = RPC_AUD_DEF_CODEC_VOC_AMR; /* RPC_VOC_CAP_AMR */
+		cfg.codec = RPC_AUD_DEF_CODEC_VOC_AMR; 
 
 	cfg.snd_method = RPC_SND_METHOD_VOICE;
 	rc = audmgr_enable(&audio->audmgr, &cfg);
@@ -314,7 +303,7 @@ static int audvoicememo_enable(struct audio_voicememo *audio)
 	if (rc < 0)
 		return rc;
 
-	/* Configure VOC Rec buffer */
+	
 	for (index = 0; index < MAX_REC_BUF_COUNT; index++) {
 		audio->in[index].data = audio->rec_buf_ptr + offset;
 		audio->in[index].addr = audio->phys + offset;
@@ -339,7 +328,7 @@ static int audvoicememo_enable(struct audio_voicememo *audio)
 	}
 
 
-	/* Start Recording */
+	
 	msg.args.param_status = cpu_to_be32(0x00000001);
 	msg.args.rec_type = cpu_to_be32(audio->voicememo_cfg.rec_type);
 	msg.args.rec_interval_ms =
@@ -378,7 +367,6 @@ err:
 	return -1;
 }
 
-/* must be called with audio->lock held */
 static int audvoicememo_disable(struct audio_voicememo *audio)
 {
 	struct rpc_request_hdr rhdr;
@@ -387,9 +375,10 @@ static int audvoicememo_disable(struct audio_voicememo *audio)
 		msm_rpc_setup_req(&rhdr, audio->rpc_prog, audio->rpc_ver,
 				SND_VOC_REC_STOP_PROC);
 		rc = msm_rpc_write(audio->sndept, &rhdr, sizeof(rhdr));
-		wait_event_timeout(audio->wait, audio->stopped == 0,
+		rc = wait_event_timeout(audio->wait, audio->stopped == 1,
 				1 * HZ);
-		audio->stopped = 1;
+		if (rc == 0)
+			audio->stopped = 1;
 		wake_up(&audio->read_wait);
 		audmgr_disable(&audio->audmgr);
 		audio->enabled = 0;
@@ -397,7 +386,6 @@ static int audvoicememo_disable(struct audio_voicememo *audio)
 	return 0;
 }
 
-/* RPC Reply Generator */
 static void rpc_reply(struct msm_rpc_endpoint *ept, uint32_t xid)
 {
 	int rc = 0;
@@ -406,7 +394,7 @@ static void rpc_reply(struct msm_rpc_endpoint *ept, uint32_t xid)
 
 	MM_AUD_DBG("inside\n");
 	reply->xid = cpu_to_be32(xid);
-	reply->type = cpu_to_be32(RPC_TYPE_REPLY); /* reply */
+	reply->type = cpu_to_be32(RPC_TYPE_REPLY); 
 	reply->reply_stat = cpu_to_be32(RPCMSG_REPLYSTAT_ACCEPTED);
 
 	reply->data.acc_hdr.accept_stat = cpu_to_be32(RPC_ACCEPTSTAT_SUCCESS);
@@ -424,10 +412,6 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 	struct audio_voicememo *audio = private;
 
 	MM_AUD_DBG("inside\n");
-	/* Sending Ack before processing the request
-	 * to make sure A9 get response immediate
-	 * However, if there is validation of request planned
-	 * may be move this reply Ack at the end */
 	rpc_reply(audio->sndept, xid);
 	switch (proc) {
 	case SND_VOC_REC_AV_SYNC_CB_PTR_PROC: {
@@ -452,11 +436,13 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 			be32_to_cpu(datacb_data->status),\
 			be32_to_cpu(datacb_data->rec_status));
 
-		/* Data recorded */
+		
 		if ((rec_status == RPC_VOC_REC_STAT_DATA) ||
 		(rec_status == RPC_VOC_REC_STAT_DONE)) {
 			if (datacb_data->pkt.fw_data.fw_ptr_status &&
-			be32_to_cpu(datacb_data->pkt.fw_data.rec_length)) {
+			be32_to_cpu(datacb_data->pkt.fw_data.rec_length) &&
+			be32_to_cpu(datacb_data->pkt.fw_data.rec_length)
+			<= MAX_FRAME_SIZE) {
 
 				MM_AUD_DBG("Copy FW link:rec_buf_size \
 				= 0x%08x, rec_length=0x%08x\n",
@@ -479,7 +465,10 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 				datacb_data->pkt.fw_data.rec_num_frames);
 				mutex_unlock(&audio->dsp_lock);
 			} else if (datacb_data->pkt.rw_data.rw_ptr_status &&
-			be32_to_cpu(datacb_data->pkt.rw_data.rec_length)) {
+			be32_to_cpu(datacb_data->pkt.rw_data.rec_length) &&
+			be32_to_cpu(datacb_data->pkt.rw_data.rec_length)
+			<= MAX_FRAME_SIZE) {
+
 				MM_AUD_DBG("Copy RW link:rec_buf_size \
 				=0x%08x, rec_length=0x%08x\n",
 				be32_to_cpu( \
@@ -500,9 +489,18 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 				be32_to_cpu(
 				datacb_data->pkt.rw_data.rec_num_frames);
 				mutex_unlock(&audio->dsp_lock);
+			} else {
+				MM_ERR("FW: ptr_status %d, rec_length=0x%08x,"
+				"RW: ptr_status %d, rec_length=0x%08x\n",
+				datacb_data->pkt.rw_data.fw_ptr_status, \
+				be32_to_cpu( \
+				datacb_data->pkt.fw_data.rec_length), \
+				datacb_data->pkt.rw_data.fw_ptr_status, \
+				be32_to_cpu( \
+				datacb_data->pkt.fw_data.rec_length));
 			}
 			if (rec_status != RPC_VOC_REC_STAT_DONE) {
-				/* Not end of record */
+				
 				bmsg.args.buf = \
 				(uint32_t) audio->in[audio->fill_next].data;
 				bmsg.args.num_bytes = \
@@ -519,8 +517,9 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 
 				wake_up(&audio->read_wait);
 			} else {
-				/* Indication record stopped gracefully */
+				
 				MM_AUD_DBG("End Of Voice Record\n");
+				audio->stopped = 1;
 				wake_up(&audio->wait);
 			}
 		} else if (rec_status == RPC_VOC_REC_STAT_PAUSED) {
@@ -539,6 +538,8 @@ static void process_rpc_request(uint32_t proc, uint32_t xid,
 					callback time\n");
 		else if (rec_status == RPC_VOC_REC_STAT_AUTO_STOP) {
 			MM_AUD_DBG(" Voice Record AUTO STOP\n");
+			mutex_lock(&audio->lock);
+			audio->stopped = 1;
 			wake_up(&audio->read_wait);
 			audmgr_disable(&audio->audmgr);
 			audvoicememo_ioport_reset(audio);
@@ -585,7 +586,7 @@ static int voicememo_rpc_thread(void *data)
 				status =
 				be32_to_cpu(rep->data.acc_hdr.accept_stat);
 
-				/* Confirm major RPC success during open*/
+				
 				if ((audio->enabled == 0) &&
 					(status == RPC_ACCEPTSTAT_SUCCESS) &&
 					(audio->rpc_xid == rep->xid)) {
@@ -597,7 +598,7 @@ static int voicememo_rpc_thread(void *data)
 			} else {
 				MM_AUD_ERR("rpc_reply denied!\n");
 			}
-			/* process reply */
+			
 			continue;
 		} else if (type == RPC_TYPE_REQUEST) {
 			if (len < RPC_REQUEST_HDR_SZ)
@@ -617,7 +618,6 @@ static int voicememo_rpc_thread(void *data)
 	return 0;
 }
 
-/* ------------------- device --------------------- */
 static long audio_voicememo_ioctl(struct file *file,
 				unsigned int cmd, unsigned long arg)
 {
@@ -661,8 +661,7 @@ static long audio_voicememo_ioctl(struct file *file,
 			MM_AUD_DBG("AUDIO_GET_CONFIG\n");
 			cfg.buffer_size = audio->rec_buf_size;
 			cfg.buffer_count = MAX_REC_BUF_COUNT;
-			cfg.sample_rate = 8000; /* Voice Encoder works on 8k,
-						 * Mono */
+			cfg.sample_rate = 8000; 
 			cfg.channel_count = 1;
 			cfg.type = 0;
 			cfg.unused[0] = 0;
@@ -754,10 +753,6 @@ static ssize_t audio_voicememo_read(struct file *file,
 			break;
 		}
 		if (count < audio->in[audio->read_next].used) {
-			/* Read must happen in frame boundary. Since driver does
-			 * not split frames, read count must be greater or
-			 * equal to size of existing frames to copy
-			 */
 			MM_AUD_DBG("read not in frame boundary\n");
 			break;
 		} else {
@@ -781,10 +776,7 @@ static ssize_t audio_voicememo_read(struct file *file,
 			if ((++audio->read_next) == MAX_REC_BUF_COUNT)
 				audio->read_next = 0;
 			if (audio->in[audio->read_next].used == 0)
-				break;  /* No data ready at this moment
-					 * Exit while loop to prevent
-					 * output thread sleep too long
-					 */
+				break;  
 		}
 	}
 	mutex_unlock(&audio->read_lock);
@@ -829,7 +821,7 @@ static int audio_voicememo_open(struct inode *inode, struct file *file)
 	if (rc)
 		goto done;
 
-	/*Set default param to None*/
+	
 	memset(&audio->voicememo_cfg, 0, sizeof(audio->voicememo_cfg));
 
 	file->private_data = audio;
@@ -925,7 +917,7 @@ err:
 
 static void __exit audio_voicememo_exit(void)
 {
-	/* Close the RPC connection to make thread to comeout */
+	
 	msm_rpc_close(the_audio_voicememo.sndept);
 	the_audio_voicememo.sndept = NULL;
 	kthread_stop(the_audio_voicememo.task);

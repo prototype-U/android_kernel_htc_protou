@@ -16,7 +16,7 @@
 #include <linux/delay.h>
 #endif
 
-#if 1 //def RAWCHIP_SPI_DEBUG
+#if 1 
 #define CDBG(fmt, args...) pr_info(fmt, ##args)
 #else
 #define CDBG(fmt, args...) do { } while (0)
@@ -68,25 +68,18 @@ yushan_spi_sync_write_then_read(uint8_t *txbuf, size_t n_tx,
 	spi_message_add_tail(&rx_t, &m);
 #endif
 
-	return spi_sync(yushan_spi_ctrl->spi, &m); /* USE spi_sync function for now.*/
+	return spi_sync(yushan_spi_ctrl->spi, &m); 
 }
 int yushan_spi_read(uint16_t reg, uint8_t *rval)
 {
 	int rc = 0;
-	uint8_t /*tx[3],*/ rx[6];
-/*
-	tx[0] = 0x60;
-	tx[1] = (reg & 0xff00) >> 8;
-	tx[2] = reg & 0x00ff;
-
-	rc = yushan_spi_single_write(&tx[0], 3);
-*/
+	uint8_t  rx[6];
 	rx[0] = 0x60;
 	rx[1] = (reg & 0xff00) >> 8;
 	rx[2] = reg & 0x00ff;
 	rx[3] = 0x61;
 	rx[4] = 0;
-	/*rx[5] = 0;*/
+	
 
 	rc = yushan_spi_sync_write_then_read(&rx[0], 3,
 		&rx[3], 2);
@@ -96,7 +89,7 @@ int yushan_spi_read(uint16_t reg, uint8_t *rval)
 		rx[3], rx[4], rx[5]);
 #endif
 	if (rc >= 0)
-		/* *rval = rx[4] << 8 | rx[5];*/
+		
 		*rval = rx[4];
 	else {
 		pr_err("yushan_spi_sync_write_then_read failed\n");
@@ -116,7 +109,7 @@ int SPI_Read( uint16_t uwIndex , uint16_t uwCount , uint8_t * pData)
 	for (i=0; i<uwCount; i++)
 	{
 		reg = uwIndex+i;
-		/*rc = yushan_spi_read(reg,&val);*/
+		
 		rc = rawchip_spi_read_2B1B(reg,&val);
 		if (rc==0)
 		{
@@ -222,35 +215,21 @@ static int yushan_spi_sync_write_once(uint8_t *tbuf, uint8_t *wbuf)
 		.tx_buf	= tbuf,
 		.len = 4,
 	};
-/*
-	struct spi_transfer tx_buf = {
-		.tx_buf = wbuf,
-		.len = 1,
-	};
-*/
 	spi_message_init(&m);
 	spi_message_add_tail(&tx_addr, &m);
-/*
-	spi_message_add_tail(&tx_buf, &m);
-*/
 	return yushan_spi_transaction(&m);
 }
 
-int yushan_spi_write(uint16_t reg, uint8_t/*uint16_t*/ val)
+int yushan_spi_write(uint16_t reg, uint8_t val)
 {
-	uint8_t tx[4]/*, wb[1]*/;
+	uint8_t tx[4];
 
 	tx[0] = 0x60;
 	tx[1] = (reg & 0xff00) >> 8;
 	tx[2] = reg & 0x00ff;
 	tx[3] = val;
-/*
-	wb[0] = yushan_REGVAL_WR;
-	wb[1] = (val & 0xff00) >> 8;
-	wb[2] = val & 0x00ff;
-*/
 
-    return yushan_spi_sync_write_once(&tx[0], NULL/*&wb[0]*/);
+    return yushan_spi_sync_write_once(&tx[0], NULL);
 }
 
 int SPI_Write(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
@@ -370,7 +349,7 @@ int rawchip_spi_write_2B1B(uint16_t addr, unsigned char data)
 {
 	unsigned char buffer[4];
 	int rc;
-	/*uint8_t rb;*/
+	
 
 	if (!rawchip_dev)
 		return -1;
@@ -388,7 +367,6 @@ int rawchip_spi_write_2B1B(uint16_t addr, unsigned char data)
 	CDBG("[CAM] rawchip_spi_write_2B1B--\
 		, rc=%d (addr=0x%x, data=0x%x)\n", rc, addr, data);
 
-/*read back check*/
 #if 0
 	msleep(10);
 	rawchip_spi_read_2B1B(addr, &rb);
@@ -477,7 +455,7 @@ int spi_rawchip_probe(struct spi_device *rawchip)
 
 	rawchip_dev = rawchip;
 
-	/*from yushan*/
+	
 	yushan_spi_ctrl = kzalloc(sizeof(*yushan_spi_ctrl), GFP_KERNEL);
 	if (!yushan_spi_ctrl)
 		return -ENOMEM;
@@ -525,25 +503,24 @@ int rawchip_spi_init(void)
 #endif
 
 #ifdef CONFIG_SPI_CPLD
-static int spi_flag = 1;//0;
+static int spi_flag = 1;
 static char rspi_buf[yushan_MAX_TRANSFER_SIZE+3];
 int rawchip_spi_init(void)
 {
-	//spi_flag = 0;
+	
 	pr_info("rawchip_spi_init\n");
-	spi_set_route(1);//jacky add for EVI2SPI method //spi_set_route(0);
-//	dd_gpio_spi_init(); //for GPIO2SPI vis CPLD
+	spi_set_route(1);
 	return 0;
 }
 
 int rawchip_read(int l, unsigned char* buf)
 {
-#if 1 //for EVI2SPI
+#if 1 
 	if(spi_flag)
 		return cpld_spi_read(l, buf);
 	else
 		return gpio_spi_read(l, buf);
-#else //for GPIO2SPI
+#else 
 	dd_gpio_spi_read(l, buf);
 #endif
 	return SUCCESS;
@@ -551,7 +528,7 @@ int rawchip_read(int l, unsigned char* buf)
 
 int rawchip_write(int l, unsigned char* buf)
 {
-#if 1 //for EVI2SPI
+#if 1 
 	if(spi_flag)
 		return cpld_spi_write(l, buf);
 	else
@@ -565,42 +542,42 @@ int rawchip_write(int l, unsigned char* buf)
 int SPI_Read(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
 {
 	int rc;
-	//printk("%s uwIndex %x, uwCount %d\n", __func__, uwIndex, uwCount);
+	
 	rspi_buf[0] = 0x60;
 	rspi_buf[1] = uwIndex >> 8;
 	rspi_buf[2] = uwIndex & 0xff;
 	rspi_buf[3] = 0x61;
 	rc = rawchip_read(uwCount + 4, rspi_buf);
 	memcpy(pData, rspi_buf + 4, uwCount);
-	//mdelay(10); //mark to test on 4/26
+	
 	return SUCCESS;
-	//return rc;
+	
 }
 
 int SPI_Write(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
 {
-	//printk("%s uwIndex %x, uwCount %d\n", __func__, uwIndex, uwCount);
+	
 	rspi_buf[0] = 0x60;
 	rspi_buf[1] = uwIndex >> 8;
 	rspi_buf[2] = uwIndex & 0xff;
 	memcpy(rspi_buf + 3, pData, uwCount);
-	//mdelay(5); //mark to test on 4/26
+	
 	rawchip_write(uwCount + 3, rspi_buf);
-	//mdelay(5); //mark to test on 4/27
+	
 	return SUCCESS;
 }
 int rawchip_spi_read_2B2B(uint16_t addr, uint16_t *data)
 {
 	int rc = 0;
-	//pr_info("spi_read_2B2B\n");
+	
 	rspi_buf[0] = 0x60;
 	rspi_buf[1] = addr >> 8;
 	rspi_buf[2] = addr & 0xff;
 	rspi_buf[3] = 0x61;
 	rc = rawchip_read(2 + 4, rspi_buf);
 	memcpy(data, rspi_buf + 4, 2);
-	//printk("%s addr %x\n", __func__, addr);
-	//return rc;
+	
+	
 	return SUCCESS;
 }
 int SPI_Write_4thByte(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
@@ -608,7 +585,7 @@ int SPI_Write_4thByte(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
 	int i, status;
 	uint16_t transferedIndex = 0;
 
-	//printk("%s uwIndex %x, uwCount %d\n", __func__, uwIndex, uwCount);
+	
 
 	while (transferedIndex < uwCount) {
 		rspi_buf[0] = 0x60;
@@ -626,23 +603,23 @@ int SPI_Write_4thByte(uint16_t uwIndex , uint16_t uwCount , uint8_t *pData)
 	}
 	return SUCCESS;
 }
-int yushan_spi_write(uint16_t reg, uint8_t/*uint16_t*/ val)
+int yushan_spi_write(uint16_t reg, uint8_t val)
 {
 	int rc = 0;
-	//printk("%s reg %x, val %x\n", __func__, reg, val);
+	
 	rspi_buf[0] = 0x60;
 	rspi_buf[1] = reg >> 8;
 	rspi_buf[2] = reg & 0xff;
 	rspi_buf[3] = val;
 	rc = rawchip_write(4, rspi_buf);
-	//return rc;
+	
 	return SUCCESS;
 }
 int rawchip_spi_write_2B1B(uint16_t addr, unsigned char data)
 {
-	//printk("%s addr %x, data %x\n", __func__, addr, data);
+	
 	yushan_spi_write(addr, data);
-	//return 0;
+	
 	return SUCCESS;
 }
 #endif

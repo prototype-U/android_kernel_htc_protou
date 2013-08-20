@@ -1,6 +1,6 @@
 /* arch/arm/mach-msm/qdsp5/audmgr.h
  *
- * Copyright 2008 (c) Code Aurora Forum. All rights reserved.
+ * Copyright 2008,2012 (c) Code Aurora Forum. All rights reserved.
  * Copyright (C) 2008 Google, Inc.
  *
  * This software is licensed under the terms of the GNU General Public
@@ -75,6 +75,7 @@ enum rpc_aud_def_codec_type {
 	RPC_AUD_DEF_CODEC_AMR_NB,
 	RPC_AUD_DEF_CODEC_13K,
 	RPC_AUD_DEF_CODEC_EVRC,
+	RPC_AUD_DEF_CODEC_AC3,
 	RPC_AUD_DEF_CODEC_MAX_002,
 };
 
@@ -151,13 +152,9 @@ struct rpc_audmgr_enable_client_args {
 
 struct rpc_audmgr_cb_func_ptr {
 	uint32_t cb_id;
-	uint32_t status; /* Audmgr status */
-	uint32_t set_to_one;  /* Pointer status (1 = valid, 0  = invalid) */
+	uint32_t status; 
+	uint32_t set_to_one;  
 	uint32_t disc;
-	/* disc = AUDMGR_STATUS_READY => data=handle
-	   disc = AUDMGR_STATUS_CODEC_CONFIG => data = handle
-	   disc = AUDMGR_STATUS_DISABLED => data =status_disabled
-	   disc = AUDMGR_STATUS_VOLUME_CHANGE => data = volume-change */
 	union {
 		uint32_t handle;
 		uint32_t volume;
@@ -193,21 +190,4 @@ int audmgr_open(struct audmgr *am);
 int audmgr_close(struct audmgr *am);
 int audmgr_enable(struct audmgr *am, struct audmgr_config *cfg);
 int audmgr_disable(struct audmgr *am);
-
-typedef void (*audpp_event_func)(void *private, unsigned id, uint16_t *msg);
-
-int audpp_enable(int id, audpp_event_func func, void *private);
-void audpp_disable(int id, void *private);
-
-int audpp_send_queue1(void *cmd, unsigned len);
-int audpp_send_queue2(void *cmd, unsigned len);
-int audpp_send_queue3(void *cmd, unsigned len);
-
-int audpp_set_volume_and_pan(unsigned id, unsigned volume, int pan);
-int audpp_pause(unsigned id, int pause);
-int audpp_flush(unsigned id);
-void audpp_avsync(int id, unsigned rate);
-unsigned audpp_avsync_sample_count(int id);
-unsigned audpp_avsync_byte_count(int id);
-
 #endif

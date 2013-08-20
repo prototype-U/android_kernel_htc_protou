@@ -23,23 +23,8 @@
 #ifndef __ASM_ARCH_MSM_IOMAP_7XXX_H
 #define __ASM_ARCH_MSM_IOMAP_7XXX_H
 
-/* Physical base address and size of peripherals.
- * Ordered by the virtual base addresses they will be mapped at.
- *
- * MSM_VIC_BASE must be an value that can be loaded via a "mov"
- * instruction, otherwise entry-macro.S will not compile.
- *
- * If you add or remove entries here, you'll want to edit the
- * msm_io_desc array in arch/arm/mach-msm/io.c to reflect your
- * changes.
- *
- */
 
-#if defined(CONFIG_MACH_PROTODCG)
-#define MSM_SHARED_RAM_PHYS   0x00100000
-#else
 #define MSM_SHARED_RAM_PHYS   0x00200000
-#endif
 
 #define MSM7XXX_VIC_PHYS          0xC0000000
 #define MSM7XXX_VIC_SIZE          SZ_4K
@@ -93,12 +78,12 @@
 #endif
 
 #if defined(CONFIG_ARCH_MSM7X27A)
-#if defined(CONFIG_MACH_PROTODCG)
-#define MSM_RAM_CONSOLE_BASE    0x12F00000 /* MSM_HTC_RAM_CONSOLE_PHYS must be the same */
+#if (defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY) || defined(CONFIG_MACH_DUMMY))
+#define MSM_HTC_RAM_CONSOLE_PHYS        0x03A00000  
 #else
-#define MSM_HTC_RAM_CONSOLE_PHYS        0x03100000  /* must be the same as MSM_RAM_CONSOLE_BASE in board file */
+#define MSM_HTC_RAM_CONSOLE_PHYS        0x03100000  
 #endif
-#define MSM_HTC_RAM_CONSOLE_SIZE	(SZ_1M - SZ_128K)  /* 128K for debug info */
+#define MSM_HTC_RAM_CONSOLE_SIZE	(SZ_1M - SZ_128K)  
 #endif
 
 #define MSM_HTC_DEBUG_INFO_BASE 	IOMEM(0xFB700000)

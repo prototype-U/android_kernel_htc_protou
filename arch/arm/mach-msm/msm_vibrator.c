@@ -24,6 +24,7 @@
 #include <linux/debug_by_vibrator.h>
 #include <linux/wakelock.h>
 #include <mach/msm_rpcrouter.h>
+#include <linux/module.h>
 #define VIB_INFO_LOG(fmt, ...) \
 		printk(KERN_INFO "[VIB]" fmt, ##__VA_ARGS__)
 #define VIB_ERR_LOG(fmt, ...) \
@@ -196,20 +197,8 @@ static struct timed_output_dev pmic_vibrator = {
 	.enable = vibrator_enable,
 };
 
-#if defined(CONFIG_DEBUG_BY_VIBRATOR)	 //HTC_CSP_START
+#if defined(CONFIG_DEBUG_BY_VIBRATOR)	 
 #define DEBUG_VIBRATOR_TIME	(3000)
-/**
-* debug_by_vibrator -debug interface.
-* @mode: debug mode.
-*	ERR_MODE mode: Common error,vibrate 3 seconds, with the log: [VIB]: Kernel ERROR!!Root cause module is XXX.
-*	CRASH_MODE mode: Crash mode or fatal error, be careful to use!vibrate always, with the log: [VIB]:FATAL ERROR!!Root cause is XXX.
-*@name: the device name to use and to print in log.
-*
-* Using the interface, below steps shouled be followed.
-*	1. Include the file: #include<linux/debug_by_vibrator.h>
-*	2. Call the interface: debug_by_vibrator(mode,your_module_name);
-*	3. Return values: when 0,function called correctly; when -1,mode number error.
-*/
 int debug_by_vibrator(int mode, const char *name)
 {
 	int ret = 0;
@@ -260,9 +249,9 @@ int get_vibrator_enabled(void)
 	return vibe_state;
 }
 EXPORT_SYMBOL_GPL(get_vibrator_enabled);
-#endif	//HTC_CSP_END
+#endif	
 
-#if defined(CONFIG_DEBUG_BY_VIBRATOR)	//HTC_CSP_START
+#if defined(CONFIG_DEBUG_BY_VIBRATOR)	
 static ssize_t debug_by_vibrator_store(
 		struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t size)
@@ -302,8 +291,8 @@ static ssize_t debug_by_vibrator_show(struct device *dev,
 	return ret;
 }
 
-static DEVICE_ATTR(debug_by_vibrator, S_IRUGO | S_IWUSR, debug_by_vibrator_show, debug_by_vibrator_store);
-#endif	//HTC_CSP_END
+static DEVICE_ATTR(debug_by_vibrator, 0644, debug_by_vibrator_show, debug_by_vibrator_store);
+#endif	
 
 static ssize_t voltage_level_show(struct device *dev, struct device_attribute *attr,
 		char *buf)
@@ -326,7 +315,7 @@ static ssize_t voltage_level_store(
 	return size;
 }
 
-static DEVICE_ATTR(voltage_level, S_IRUGO | S_IWUSR, voltage_level_show, voltage_level_store);
+static DEVICE_ATTR(voltage_level, 0644, voltage_level_show, voltage_level_store);
 
 void __init msm_init_pmic_vibrator(int level)
 {
@@ -334,7 +323,7 @@ void __init msm_init_pmic_vibrator(int level)
 	INIT_WORK(&vibrator_work, update_vibrator);
 	spin_lock_init(&vibe_lock);
 	vibe_state = 0;
-	wake_lock_init(&vib_wake_lock, WAKE_LOCK_IDLE, "vib");
+	wake_lock_init(&vib_wake_lock, WAKE_LOCK_SUSPEND, "vib");
 	hrtimer_init(&vibe_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	vibe_timer.function = vibrator_timer_func;
 	pmic_vibrator_level = level;
@@ -342,18 +331,15 @@ void __init msm_init_pmic_vibrator(int level)
 	rc = device_create_file(pmic_vibrator.dev, &dev_attr_voltage_level);
 	if (rc < 0)
 		VIB_ERR_LOG("%s, create voltage_level fail\n", __func__);
-#if defined(CONFIG_DEBUG_BY_VIBRATOR)	//HTC_CSP_START
+#if defined(CONFIG_DEBUG_BY_VIBRATOR)	
 
 	rc = device_create_file(pmic_vibrator.dev, &dev_attr_debug_by_vibrator);
 	if (rc < 0) {
 		VIB_ERR_LOG("%s, create debug sysfs fail\n", __func__);
-/*		goto err_create_debug_flag; */
 	}
-#endif	//HTC_CSP_END
+#endif	
 	VIB_INFO_LOG("%s, init pmic vibrator!",__func__);
 	return;
-/*err_create_debug_flag:
-	device_remove_attrs(pmic_vibrator.dev);*/
 }
 
 MODULE_DESCRIPTION("timed output pmic vibrator device");

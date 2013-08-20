@@ -65,6 +65,35 @@ struct yushan_reg_t {
 
 extern struct yushan_reg_t yushan_regs;
 
+
+struct yushan_reg_u_code_t {
+	uint16_t pdpcode_first_addr;
+	uint8_t *pdpcode;
+	uint16_t pdpcode_size;
+
+	uint16_t pdpBootAddr;
+	uint16_t pdpStartAddr;
+
+	uint16_t dppcode_first_addr;
+	uint8_t *dppcode;
+	uint16_t dppcode_size;
+
+	uint16_t dppBootAddr;
+	uint16_t dppStartAddr;
+
+	uint16_t dopcode_first_addr;
+	uint8_t *dopcode;
+	uint16_t dopcode_size;
+
+	uint16_t dopBootAddr;
+	uint16_t dopStartAddr;
+};
+
+extern struct yushan_reg_u_code_t yushan_u_code_r2;
+extern struct yushan_reg_u_code_t yushan_u_code_r3;
+
+
+
 struct yushan_reg_clib_t {
 	uint16_t pdpclib_first_addr;
 	uint8_t *pdpclib;
@@ -107,6 +136,7 @@ struct rawchip_sensor_init_data {
 	uint16_t y_even_inc;
 	uint16_t y_odd_inc;
 	uint8_t binning_rawchip;
+	uint8_t use_rawchip;
 };
 
 typedef enum {
@@ -117,12 +147,13 @@ typedef enum {
 
 typedef struct {
   uint16_t gain;
+  uint16_t dig_gain;
   uint16_t exp;
 } rawchip_aec_params_t;
 
 typedef struct {
-  uint8_t rg_ratio; /* Q6 format */
-  uint8_t bg_ratio; /* Q6 format */
+  uint8_t rg_ratio; 
+  uint8_t bg_ratio; 
 } rawchip_awb_params_t;
 
 typedef struct {

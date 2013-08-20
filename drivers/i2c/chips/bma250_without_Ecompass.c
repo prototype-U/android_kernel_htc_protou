@@ -22,8 +22,9 @@
 #include <linux/delay.h>
 #include<linux/earlysuspend.h>
 #include <linux/akm8975.h>
+#include <linux/export.h>
+#include <linux/module.h>
 
-/*#define EARLY_SUSPEND_BMA 1*/
 
 #define D(x...) printk(KERN_DEBUG "[GSNR][BMA250 NO_COMP] " x)
 #define I(x...) printk(KERN_INFO "[GSNR][BMA250 NO_COMP] " x)
@@ -52,9 +53,8 @@ static atomic_t PhoneOn_flag = ATOMIC_INIT(0);
 #define DEVICE_ACCESSORY_ATTR(_name, _mode, _show, _store) \
 struct device_attribute dev_attr_##_name = __ATTR(_name, _mode, _show, _store)
 
-#define	ASENSE_TARGET			0x02D0		/*720*/
-/* Added for printing GSensor log once in a while for debugging*/
-#define TIME_LOG		50	/*200 ms * 50 ~= 10 sec*/
+#define	ASENSE_TARGET			0x02D0		
+#define TIME_LOG		50	
 static unsigned int numCount;
 bool sensors_on;
 static atomic_t m_flag;
@@ -153,14 +153,7 @@ static int BMA_Init(void)
 	range = (buffer[0] & 0xF0) | DEFAULT_RANGE;
 	bw = (buffer[1] & 0xE0) | DEFAULT_BW;
 
-	/* Multiple write msgs */
-	/*buffer[3] = bw;
-	buffer[2] = bma250_BW_SEL_REG;
-	buffer[1] = range;
-	buffer[0] = bma250_RANGE_SEL_REG;
-	ret = BMA_I2C_TxData(buffer, 4);
-	if (ret < 0)
-		return -1;*/
+	
 
 	buffer[1] = bw;
 	buffer[0] = bma250_BW_SEL_REG;
@@ -178,7 +171,7 @@ static int BMA_Init(void)
 		return -1;
 	}
 
-	/* Debug use */
+	
 	buffer[0] = bma250_RANGE_SEL_REG;
 	ret = BMA_I2C_RxData(buffer, 2);
 	if (ret < 0)
@@ -203,10 +196,6 @@ static int BMA_TransRBuff(short *rbuf)
 	if (ret < 0)
 		return ret;
 
-	/*D("%s: buffer(0, 1, 2, 3, 4, 5) = (0x%02x, 0x%02x, "
-		"0x%02x, 0x%02x, 0x%02x, 0x%02x)\n",
-		__func__, buffer[0], buffer[1], buffer[2],
-		buffer[3], buffer[4], buffer[5]);*/
 
 	rbuf[0] = (short)(buffer[1] << 8 | buffer[0]);
 	rbuf[0] >>= 6;
@@ -221,7 +210,6 @@ static int BMA_TransRBuff(short *rbuf)
 	return 1;
 }
 
-/* set  operation mode: 0 = normal, 1 = suspend */
 static int BMA_set_mode(unsigned char mode)
 {
 	char buffer[2] = "";
@@ -238,7 +226,7 @@ static int BMA_set_mode(unsigned char mode)
 		ret = BMA_I2C_RxData(buffer, 1);
 		if (ret < 0)
 			return -1;
-		/*D("%s: MODE_CTRL_REG++ = 0x%02x\n", __func__, buffer[0]);*/
+		
 
 		switch (mode) {
 		case bma250_MODE_NORMAL:
@@ -252,19 +240,14 @@ static int BMA_set_mode(unsigned char mode)
 			break;
 		}
 
-		/*D("%s: data1 = 0x%02x\n", __func__, data1);*/
+		
 		buffer[0] = bma250_MODE_CTRL_REG;
 		buffer[1] = data1;
 		ret = BMA_I2C_TxData(buffer, 2);
 	} else
 		ret = E_OUT_OF_RANGE;
 
-	/* Debug use */
-	/*buffer[0] = bma250_MODE_CTRL_REG;
-	ret = BMA_I2C_RxData(buffer, 1);
-	if (ret < 0)
-		return -1;
-	D("%s: MODE_CTRL_REG-- = 0x%02x\n", __func__, buffer[0]);*/
+	
 
 	return ret;
 }
@@ -329,16 +312,10 @@ static long bma_ioctl(struct file *file, unsigned int cmd,
 	case BMA_IOCTL_READ:
 		if (rwbuf[0] < 1)
 			return -EINVAL;
-		/*ret = BMA_I2C_RxData(&rwbuf[1], rwbuf[0]);
-		if (ret < 0)
-			return ret;*/
 		break;
 	case BMA_IOCTL_WRITE:
 		if (rwbuf[0] < 2)
 			return -EINVAL;
-		/*ret = BMA_I2C_TxData(&rwbuf[1], rwbuf[0]);
-		if (ret < 0)
-			return ret;*/
 		break;
 	case BMA_IOCTL_WRITE_CALI_VALUE:
 		pdata->gs_kvalue = kbuf;
@@ -394,8 +371,6 @@ static long bma_ioctl(struct file *file, unsigned int cmd,
 
 	switch (cmd) {
 	case BMA_IOCTL_READ:
-		/*if (copy_to_user(argp, &rwbuf, sizeof(rwbuf)))
-			return -EFAULT;*/
 		break;
 	case BMA_IOCTL_READ_ACCELERATION:
 		if (copy_to_user(argp, &buf, sizeof(buf)))
@@ -461,20 +436,16 @@ static void gsensor_poll_work_func(struct work_struct *work)
 			}
 		}
 		for (i = 0; i < 3; i++) {
-			/*256 = accprms->AS[i] from /data/misc/AccPrmsF.ini"*/
+			
 			gval[i] = ((buffer[i] + offset_buf[i] - user_offset[i])
 					*ASENSE_TARGET) / 256;
-			/*I("gval[%d] = %d, buffer[%d] = %d\n", i, gval[i], i,
-				buffer[i]);
-			I("offset_buf[%d] = %d, user_offset[%d] = %d\n",
-				i, offset_buf[i],  i, user_offset[i]);*/
 		}
 		for (j = 0; j < 3; j++) {
 			for (k = 0; k < 3; k++)
 				m_Alayout[j][k] = pdata->layouts[3][j][k];
 		}
 
-		/* Acceleration data transformation*/
+		
 		g_acc[0] = (gval[0])*m_Alayout[0][0] +
 			   (gval[1])*m_Alayout[0][1] +
 			   (gval[2])*m_Alayout[0][2];
@@ -496,13 +467,11 @@ static void gsensor_poll_work_func(struct work_struct *work)
 		}
 
 		numCount++;
-		/* Added for printing GSensor log once in a while for debugging
-		 */
 		if ((numCount % TIME_LOG) == 0)
 			D("GSensor [%d,%d,%d]\n", gval[0], gval[1], gval[2]);
 	}
 
-	/* E("gsensor_poll_work_func:working %d, %d\n", a_flag, t_flag); */
+	
 	mutex_unlock(&gsensor_lock);
 	schedule_delayed_work(&akm->input_work,
 			msecs_to_jiffies(akm->poll_interval));
@@ -534,7 +503,8 @@ int sensor_open(void)
 	D("sensor_open++\n");
 
 	if (!(atomic_read(&a_flag) || atomic_read(&t_flag))) {
-		E("sensor_open:unable to open due to the flag:%d, %d\n",
+		D("sensor_open: No need to open due to the flag: "
+		  "a_flag = %d, t_flag = %d\n",
 			atomic_read(&a_flag), atomic_read(&t_flag));
 		return 0;
 	}
@@ -570,27 +540,21 @@ int sensor_open(void)
 	}
 
 	if (akm8975_misc_data->poll_interval <= 0) {
-		E("[Gsensor] the delay interval was set to:%d, use default"
-			" value\n",
+		D("[Gsensor] the delay interval was set to %d, use default"
+			" value 200\n",
 			akm8975_misc_data->poll_interval);
 		akm8975_misc_data->poll_interval = 200;
 	}
 
-	#if 1  /* HTC_CSP_START */
-	/*
-	input_handle_event() check current and last g-sensor values.
-	If these two values are the same, current value would not be reported.
-	Set 0xffff as defalt g-sersor value, therefore the first gsensor
-	value will always be reported.
-	*/
+	#if 1  
 	akm8975_misc_data->input_dev->absinfo[ABS_X].value = 0xffff;
 	akm8975_misc_data->input_dev->absinfo[ABS_Y].value = 0xffff;
 	akm8975_misc_data->input_dev->absinfo[ABS_Z].value = 0xffff;
-	#endif /* HTC_CSP_END */
+	#endif 
 
 	sensors_on = true;
 
-	#if 1  /* HTC_CSP_START */
+	#if 1  
 	schedule_delayed_work(&akm8975_misc_data->input_work, 0);
 	#else
 	schedule_delayed_work(&akm8975_misc_data->input_work,
@@ -618,23 +582,13 @@ int sensor_close(void)
 	return ret;
 }
 
-/* GSensor AKM control interface */
 void sensor_poll_interval_set(uint32_t poll_interval)
 {
 
-/*User space app would do this after early supsend, so comment out the
-follwoing statements */
-/*
-	if (suspend_flag) {
-		E("sensor_poll_interval_set:unable to set due to early"
-			" suspend");
-		return;
-	}
-*/
 	D("sensor_poll_interval_set: %d ms\n", poll_interval);
 
 	if (poll_interval <= 0) {
-		E("sensor_poll_interval_reset: 200 ms\n");
+		D("sensor_poll_interval_reset: 200 ms\n");
 		poll_interval = 200;
 	}
 
@@ -646,7 +600,7 @@ follwoing statements */
 
 int sensor_poll_interval_get(void)
 {
-	E("sensor_poll_interval_get:%d msec\n",
+	D("sensor_poll_interval_get: %d msec\n",
 		akm8975_misc_data->poll_interval);
 	return akm8975_misc_data->poll_interval;
 }
@@ -794,7 +748,7 @@ static void bma250_late_resume(struct early_suspend *handler)
 	BMA_set_mode(bma250_MODE_NORMAL);
 }
 
-#else /* EARLY_SUSPEND_BMA */
+#else 
 
 static int bma250_suspend(struct i2c_client *client, pm_message_t mesg)
 {
@@ -808,7 +762,7 @@ static int bma250_resume(struct i2c_client *client)
 	BMA_set_mode(bma250_MODE_NORMAL);
 	return 0;
 }
-#endif /* EARLY_SUSPEND_BMA */
+#endif 
 
 static ssize_t bma250_show(struct device *dev,
 				  struct device_attribute *attr, char *buf)
@@ -878,46 +832,11 @@ static ssize_t debug_flag_store(struct device *dev,
 				   struct device_attribute *attr,
 				   const char *buf, size_t count)
 {
-/*	char buffer[3] = "", range = -1, bandwidth = -1;
-	int ret;*/
 
 	debug_flag = -1;
 	sscanf(buf, "%d", &debug_flag);
 
 	D("%s: debug_flag = %d\n", __func__, debug_flag);
-/*
-	buffer[1] = DEFAULT_BW;
-	buffer[0] = bma250_BW_SEL_REG;
-	ret = BMA_I2C_TxData(buffer, 2);
-	if (ret < 0) {
-		E("%s: Write bma250_BW_SEL_REG fail\n", __func__);
-		return -1;
-	}
-	D("%s: Write bma250_BW_SEL_REG success!\n", __func__);
-
-	buffer[1] = DEFAULT_RANGE;
-	buffer[0] = bma250_RANGE_SEL_REG;
-	ret = BMA_I2C_TxData(buffer, 2);
-	if (ret < 0) {
-		E("%s: Write bma250_BW_SEL_REG fail\n", __func__);
-		return -1;
-	}
-	D("%s: Write bma250_RANGE_SEL_REG success!\n", __func__);
-
-	buffer[0] = bma250_BW_SEL_REG;
-	ret = BMA_I2C_RxData(&buffer[0], 1);
-	if (ret < 0)
-		return -1;
-	bandwidth = (buffer[0] & 0x1F);
-
-	buffer[0] = bma250_RANGE_SEL_REG;
-	ret = BMA_I2C_RxData(&buffer[0], 1);
-	if (ret < 0)
-		return -1;
-	range = (buffer[0] & 0xF);
-
-	D("%s: range = 0x%x, bandwidth = 0x%x\n", __func__, range, bandwidth);
-*/
 	return count;
 
 }
@@ -947,12 +866,12 @@ static int bma250_registerAttr(void)
 		goto err_create_accelerometer_device;
 	}
 
-	/* register the attributes */
+	
 	ret = device_create_file(accelerometer_dev, &dev_attr_PhoneOnOffFlag);
 	if (ret)
 		goto err_create_accelerometer_device_file;
 
-	/* register the debug_en attributes */
+	
 	ret = device_create_file(accelerometer_dev, &dev_attr_debug_en);
 	if (ret)
 		goto err_create_accelerometer_debug_en_device_file;
@@ -1071,13 +990,13 @@ static int bma250_probe(struct i2c_client *client,
 	}
 
 	set_bit(EV_ABS, akm->input_dev->evbit);
-	/* x-axis acceleration */
+	
 	input_set_abs_params(akm->input_dev, ABS_X, -1872, 1872, 0, 0);
-	/* y-axis acceleration */
+	
 	input_set_abs_params(akm->input_dev, ABS_Y, -1872, 1872, 0, 0);
-	/* z-axis acceleration */
+	
 	input_set_abs_params(akm->input_dev, ABS_Z, -1872, 1872, 0, 0);
-	/* status of acceleration sensor */
+	
 	input_set_abs_params(akm->input_dev, ABS_WHEEL, -32768, 3, 0, 0);
 
 	akm->input_dev->name = "compass";

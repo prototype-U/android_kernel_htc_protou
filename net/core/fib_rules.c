@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/module.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 #include <net/fib_rules.h>
@@ -32,8 +33,6 @@ int fib_default_rule_add(struct fib_rules_ops *ops,
 	r->flags = flags;
 	r->fr_net = hold_net(ops->fro_net);
 
-	/* The lock is not required here, the list in unreacheable
-	 * at the moment this function is called */
 	list_add_tail(&r->list, &ops->rules_list);
 	return 0;
 }
@@ -322,9 +321,6 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 	if (tb[FRA_FWMARK]) {
 		rule->mark = nla_get_u32(tb[FRA_FWMARK]);
 		if (rule->mark)
-			/* compatibility: if the mark value is non-zero all bits
-			 * are compared unless a mask is explicitly specified.
-			 */
 			rule->mark_mask = 0xFFFFFFFF;
 	}
 
@@ -344,7 +340,7 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 			goto errout_free;
 
 		rule->target = nla_get_u32(tb[FRA_GOTO]);
-		/* Backward jumps are prohibited to avoid endless loops */
+		
 		if (rule->target <= rule->pref)
 			goto errout_free;
 
@@ -378,10 +374,6 @@ static int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		list_add_rcu(&rule->list, &ops->rules_list);
 
 	if (ops->unresolved_rules) {
-		/*
-		 * There are unresolved goto rules in the list, check if
-		 * any of them are pointing to this new rule.
-		 */
 		list_for_each_entry(r, &ops->rules_list, list) {
 			if (r->action == FR_ACT_GOTO &&
 			    r->target == rule->pref &&
@@ -475,19 +467,16 @@ static int fib_nl_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 
 		list_del_rcu(&rule->list);
 
-		if (rule->action == FR_ACT_GOTO)
+		if (rule->action == FR_ACT_GOTO) {
 			ops->nr_goto_rules--;
+			if (rtnl_dereference(rule->ctarget) == NULL)
+				ops->unresolved_rules--;
+		}
 
-		/*
-		 * Check if this rule is a target to any of them. If so,
-		 * disable them. As this operation is eventually very
-		 * expensive, it is only performed if goto rules have
-		 * actually been added.
-		 */
 		if (ops->nr_goto_rules > 0) {
 			list_for_each_entry(tmp, &ops->rules_list, list) {
 				if (rtnl_dereference(tmp->ctarget) == rule) {
-					rcu_assign_pointer(tmp->ctarget, NULL);
+					RCU_INIT_POINTER(tmp->ctarget, NULL);
 					ops->unresolved_rules++;
 				}
 			}
@@ -511,12 +500,12 @@ static inline size_t fib_rule_nlmsg_size(struct fib_rules_ops *ops,
 					 struct fib_rule *rule)
 {
 	size_t payload = NLMSG_ALIGN(sizeof(struct fib_rule_hdr))
-			 + nla_total_size(IFNAMSIZ) /* FRA_IIFNAME */
-			 + nla_total_size(IFNAMSIZ) /* FRA_OIFNAME */
-			 + nla_total_size(4) /* FRA_PRIORITY */
-			 + nla_total_size(4) /* FRA_TABLE */
-			 + nla_total_size(4) /* FRA_FWMARK */
-			 + nla_total_size(4); /* FRA_FWMASK */
+			 + nla_total_size(IFNAMSIZ) 
+			 + nla_total_size(IFNAMSIZ) 
+			 + nla_total_size(4) 
+			 + nla_total_size(4) 
+			 + nla_total_size(4) 
+			 + nla_total_size(4); 
 
 	if (ops->nlmsg_payload)
 		payload += ops->nlmsg_payload(rule);
@@ -545,7 +534,7 @@ static int fib_nl_fill_rule(struct sk_buff *skb, struct fib_rule *rule,
 	frh->flags = rule->flags;
 
 	if (rule->action == FR_ACT_GOTO &&
-	    rcu_dereference_raw(rule->ctarget) == NULL)
+	    rcu_access_pointer(rule->ctarget) == NULL)
 		frh->flags |= FIB_RULE_UNRESOLVED;
 
 	if (rule->iifname[0]) {
@@ -617,7 +606,7 @@ static int fib_nl_dumprule(struct sk_buff *skb, struct netlink_callback *cb)
 
 	family = rtnl_msg_family(cb->nlh);
 	if (family != AF_UNSPEC) {
-		/* Protocol specific dump request */
+		
 		ops = lookup_rules_ops(net, family);
 		if (ops == NULL)
 			return -EAFNOSUPPORT;
@@ -658,7 +647,7 @@ static void notify_rule_change(int event, struct fib_rule *rule,
 
 	err = fib_nl_fill_rule(skb, rule, pid, nlh->nlmsg_seq, event, 0, ops);
 	if (err < 0) {
-		/* -EMSGSIZE implies BUG in fib_rule_nlmsg_size() */
+		
 		WARN_ON(err == -EMSGSIZE);
 		kfree_skb(skb);
 		goto errout;
@@ -740,9 +729,9 @@ static struct pernet_operations fib_rules_net_ops = {
 static int __init fib_rules_init(void)
 {
 	int err;
-	rtnl_register(PF_UNSPEC, RTM_NEWRULE, fib_nl_newrule, NULL);
-	rtnl_register(PF_UNSPEC, RTM_DELRULE, fib_nl_delrule, NULL);
-	rtnl_register(PF_UNSPEC, RTM_GETRULE, NULL, fib_nl_dumprule);
+	rtnl_register(PF_UNSPEC, RTM_NEWRULE, fib_nl_newrule, NULL, NULL);
+	rtnl_register(PF_UNSPEC, RTM_DELRULE, fib_nl_delrule, NULL, NULL);
+	rtnl_register(PF_UNSPEC, RTM_GETRULE, NULL, fib_nl_dumprule, NULL);
 
 	err = register_pernet_subsys(&fib_rules_net_ops);
 	if (err < 0)

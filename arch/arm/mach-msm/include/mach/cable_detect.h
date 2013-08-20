@@ -15,7 +15,7 @@
 #define ADC_RETRY 3
 #define ADC_DELAY HZ/8
 
-#define PM8058ADC_15BIT(adc) ((adc * 2200) / 32767) /* vref=2.2v, 15-bits resolution */
+#define PM8058ADC_15BIT(adc) ((adc * 2200) / 32767) 
 
 #define CABLE_ERR(fmt, args...) \
 	printk(KERN_ERR "[CABLE:ERR] " fmt, ## args)
@@ -26,6 +26,7 @@
 #define CABLE_DEBUG(fmt, args...) \
 	printk(KERN_DEBUG "[CABLE] " fmt, ## args)
 
+#define ID_PIN_CPLD -1
 enum accessory_type {
 	CABLE_TYPE_UNKOWN = 0,
 	CABLE_TYPE_ID_PIN,
@@ -55,11 +56,11 @@ struct cable_detect_platform_data {
 	int vbus_mpp_irq;
 	int vbus_uevent;
 	void (*vbus_mpp_config)(void);
-	/* 1 : uart, 0 : usb */
+	
 	void (*usb_uart_switch)(int);
 	void (*usb_dpdn_switch)(int);
 
-	/* for accessory detection */
+	
 	u8 accessory_type;
 	u8 mfg_usb_carkit_enable;
 	int usb_id_pin_gpio;
@@ -84,9 +85,6 @@ struct cable_detect_platform_data {
 	int carkit_only;
 };
 
-/* -----------------------------------------------------------------------------
-»       »       »       External routine declaration
------------------------------------------------------------------------------*/
 #ifdef CONFIG_FB_MSM_HDMI_MHL_SII9234
 extern void sii9234_mhl_device_wakeup(void);
 #endif

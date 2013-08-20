@@ -16,7 +16,7 @@
 #include <linux/gpio.h>
 #include <linux/module.h>
 #include "devices.h"
-#include "proc_comm.h"
+#include <mach/proc_comm.h>
 
 enum CPLD_REG_ID {
 	CPLD_REG_MISC2 = 0,
@@ -31,7 +31,7 @@ enum CPLD_REG_ID {
 };
 
 typedef struct _tagSUSPEND_PIN_CONFIG {
-    unsigned char arGpio[200]; /* the maximum should be 1024 bytes */
+    unsigned char arGpio[200]; 
 } SUSPEND_PIN_CONFIG, *PSUSPEND_PIN_CONFIG;
 
 void gpio_set_diag_gpio_table(unsigned long *dwMFG_gpio_table)
@@ -60,12 +60,12 @@ void gpio_set_diag_gpio_table(unsigned long *dwMFG_gpio_table)
 		unsigned char tempGpio = pSuspendPinConfig->arGpio[i];
 
 		if (tempGpio & 0x1) {
-			/* configure by the settings from DIAG */
+			
 			unsigned long dwGpioKind, dwGpioConfig, dwOutputLevel;
-			if (tempGpio & 0x2) { /* GPIO INPUT PIN */
+			if (tempGpio & 0x2) { 
 				dwGpioKind = GPIO_INPUT;
 				dwOutputLevel = 0;
-			} else { /* GPIO_OUTPUT_PIN */
+			} else { 
 				dwGpioKind = GPIO_OUTPUT;
 				if (tempGpio & 0x4)
 					dwOutputLevel = 1;
@@ -73,7 +73,7 @@ void gpio_set_diag_gpio_table(unsigned long *dwMFG_gpio_table)
 					dwOutputLevel = 0;
 			}
 
-			/* config GpioPullStatus */
+			
 			if ((tempGpio & 0x10) && (tempGpio & 0x08))
 				dwGpioConfig = GPIO_PULL_UP;
 			else if (tempGpio & 0x08)
@@ -90,7 +90,7 @@ void gpio_set_diag_gpio_table(unsigned long *dwMFG_gpio_table)
 			if (dwGpioKind == GPIO_OUTPUT)
 				gpio_direction_output(i, dwOutputLevel);
 		} else {
-			/* DIAG does not want to config this GPIO */
+			
 			continue;
 		}
 	}

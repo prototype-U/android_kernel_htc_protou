@@ -22,68 +22,60 @@
 #include <mach/board_htc.h>
 
 #include "board-msm7627a.h"
-#include "proc_comm.h"
+#include <linux/module.h>
+#include <mach/proc_comm.h>
+
 
 static char *keycaps = "--qwerty";
 #undef MODULE_PARAM_PREFIX
-#define MODULE_PARAM_PREFIX "board_msm7x27a."
+#define MODULE_PARAM_PREFIX "board_protou."
 
 module_param_named(keycaps, keycaps, charp, 0);
 
-#define PRIMODS_POWER_KEY                (37)
-#define PRIMODS_GPIO_VOL_DOWN_XB         (48)
-#define PRIMODS_GPIO_VOL_DOWN            (48)
-#define PRIMODS_GPIO_VOL_UP              (86)
-
+#define PROTOU_POWER_KEY                (37)
+#define PROTOU_GPIO_VOL_DOWN            (48)
+#define PROTOU_GPIO_VOL_UP              (86)
+#if 0
 static struct gpio_event_direct_entry msm8625_keypad_nav_map_xb[] = {
 	{
-		.gpio = PRIMODS_POWER_KEY,
+		.gpio = PROTOU_POWER_KEY,
 		.code = KEY_POWER,
 	},
 	{
-		.gpio = PRIMODS_GPIO_VOL_DOWN_XB,
+		.gpio = PROTOU_GPIO_VOL_DOWN_XB,
 		.code = KEY_VOLUMEDOWN,
 	},
 	{
-		.gpio = PRIMODS_GPIO_VOL_UP,
+		.gpio = PROTOU_GPIO_VOL_UP,
 		.code = KEY_VOLUMEUP,
 	},
 };
-
+#endif
 static struct gpio_event_direct_entry msm8625_keypad_nav_map[] = {
 	{
-		.gpio = PRIMODS_POWER_KEY,
+		.gpio = PROTOU_POWER_KEY,
 		.code = KEY_POWER,
 	},
 	{
-		.gpio = PRIMODS_GPIO_VOL_DOWN,
+		.gpio = PROTOU_GPIO_VOL_DOWN,
 		.code = KEY_VOLUMEDOWN,
 	},
 	{
-		.gpio = PRIMODS_GPIO_VOL_UP,
+		.gpio = PROTOU_GPIO_VOL_UP,
 		.code = KEY_VOLUMEUP,
 	},
 };
 
 static void msm8625_direct_inputs_gpio(void)
 {
-	int res;
-
-	static struct msm_gpio matrix_inputs_gpio_table[] = {
-		{ GPIO_CFG(PRIMODS_POWER_KEY, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,	GPIO_CFG_4MA),
-							 "power_key"  },
-		{ GPIO_CFG(PRIMODS_GPIO_VOL_DOWN, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,	GPIO_CFG_4MA),
-							 "volume_down" },
-		{ GPIO_CFG(PRIMODS_GPIO_VOL_UP, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,	GPIO_CFG_4MA),
-							 "volume_up" },
+	static uint32_t matirx_inputs_gpio_table[] = {
+		GPIO_CFG(PROTOU_POWER_KEY, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,	GPIO_CFG_4MA),
+		GPIO_CFG(PROTOU_GPIO_VOL_DOWN, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_4MA),
+		GPIO_CFG(PROTOU_GPIO_VOL_UP, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_4MA),
 	};
-
-	res = msm_gpios_request_enable(matrix_inputs_gpio_table,
-				 ARRAY_SIZE(matrix_inputs_gpio_table));
-	if (res) {
-		KEY_LOGE("%s: unable to enable gpios for matrix_inputs_gpio_table\n", __func__);
-		return;
-	}
+	gpio_tlmm_config(matirx_inputs_gpio_table[0], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(matirx_inputs_gpio_table[1], GPIO_CFG_ENABLE);
+	gpio_tlmm_config(matirx_inputs_gpio_table[2], GPIO_CFG_ENABLE);
 }
 
 static struct gpio_event_input_info msm8625_keypad_power_info = {
@@ -117,14 +109,8 @@ static struct platform_device msm8625_keypad_device = {
 		.platform_data	= &msm8625_keypad_data,
 	},
 };
-/*
-static int msm8625_reset_keys_up[] = {
-	KEY_VOLUMEUP,
-	0
-};
-*/
 static struct keyreset_platform_data msm8625_reset_keys_pdata = {
-	/*.keys_up = primods_reset_keys_up,*/
+	
 	.keys_down = {
 		KEY_POWER,
 		KEY_VOLUMEDOWN,
@@ -142,13 +128,13 @@ int __init msm8625_init_keypad(void)
 {
 	if (platform_device_register(&msm8625_reset_keys_device))
 		printk(KERN_WARNING "%s: register reset key fail\n", __func__);
-
+#if 0
 	if (system_rev >= 1) {
 		msm8625_keypad_power_info.keymap = msm8625_keypad_nav_map_xb;
 		msm8625_keypad_power_info.keymap_size =
 				ARRAY_SIZE(msm8625_keypad_nav_map_xb);
 	}
-
+#endif
 	return platform_device_register(&msm8625_keypad_device);
 }
 

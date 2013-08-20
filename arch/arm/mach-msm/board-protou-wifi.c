@@ -1,5 +1,3 @@
-/* linux/arch/arm/mach-msm/board-protou-wifi.c
-*/
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/platform_device.h>
@@ -13,9 +11,7 @@
 
 #include "board-protou-wifi.h"
 
-int protou_wifi_power(int on);
-int protou_wifi_reset(int on);
-int protou_wifi_set_carddetect(int on);
+int bcm4330_wifi_set_carddetect(int val);
 int protou_wifi_get_mac_addr(unsigned char *buf);
 
 #define PREALLOC_WLAN_NUMBER_OF_SECTIONS	4
@@ -29,7 +25,6 @@ int protou_wifi_get_mac_addr(unsigned char *buf);
 
 #define WLAN_SKB_BUF_NUM	16
 
-/*#define HW_OOB 1*/
 
 static struct sk_buff *wlan_static_skb[WLAN_SKB_BUF_NUM];
 
@@ -75,6 +70,63 @@ int __init protou_init_wifi_mem(void)
 	return 0;
 }
 
+static uint32_t wifi_on_gpio_table[] = {
+        GPIO_CFG(64, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), 
+        GPIO_CFG(65, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), 
+        GPIO_CFG(66, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), 
+        GPIO_CFG(67, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), 
+        GPIO_CFG(63, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_10MA), 
+        GPIO_CFG(62, 2, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_8MA), 
+        GPIO_CFG(29, 0, GPIO_CFG_INPUT, GPIO_CFG_NO_PULL, GPIO_CFG_4MA), 
+};
+
+static uint32_t wifi_off_gpio_table[] = {
+        GPIO_CFG(64, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), 
+        GPIO_CFG(65, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), 
+        GPIO_CFG(66, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), 
+        GPIO_CFG(67, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), 
+        GPIO_CFG(63, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), 
+        GPIO_CFG(62, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), 
+        GPIO_CFG(29, 0, GPIO_CFG_INPUT, GPIO_CFG_PULL_DOWN, GPIO_CFG_4MA), 
+};
+
+static void config_gpio_table(uint32_t *table, int len)
+{
+                int n, rc;
+                for (n = 0; n < len; n++) {
+                                rc = gpio_tlmm_config(table[n], GPIO_CFG_ENABLE);
+                                if (rc) {
+                                                pr_err("%s: gpio_tlmm_config(%#x)=%d\n",
+                                                                __func__, table[n], rc);
+                                                break;
+                                }
+                }
+}
+
+int protou_wifi_power(int on)
+{
+        printk(KERN_INFO "[WLAN]%s: %d\n", __func__, on);
+
+        if (on) {
+           config_gpio_table(wifi_on_gpio_table,
+                                ARRAY_SIZE(wifi_on_gpio_table));
+        } else {
+      config_gpio_table(wifi_off_gpio_table,
+                                ARRAY_SIZE(wifi_off_gpio_table));
+        }
+
+        
+        gpio_set_value(13, on); 
+        mdelay(120);
+        return 0;
+}
+
+int protou_wifi_reset(int on)
+{
+        printk(KERN_INFO "%s: do nothing\n", __func__);
+        return 0;
+}
+
 static struct resource protou_wifi_resources[] = {
 	[0] = {
 		.name		= "bcm4329_wlan_irq",
@@ -91,10 +143,10 @@ static struct resource protou_wifi_resources[] = {
 static struct wifi_platform_data protou_wifi_control = {
 	.set_power      = protou_wifi_power,
 	.set_reset      = protou_wifi_reset,
-	.set_carddetect = protou_wifi_set_carddetect,
+	.set_carddetect = bcm4330_wifi_set_carddetect,
 	.mem_prealloc   = protou_wifi_mem_prealloc,
 	.get_mac_addr	= protou_wifi_get_mac_addr,
-	//.dot11n_enable  = 1,
+	
 };
 
 static struct platform_device protou_wifi_device = {
@@ -119,10 +171,10 @@ static unsigned protou_wifi_update_nvs(char *str)
 	if (!str)
 		return -EINVAL;
 	ptr = get_wifi_nvs_ram();
-	/* Size in format LE assumed */
+	
 	memcpy(&len, ptr + NVS_LEN_OFFSET, sizeof(len));
 
-	/* the last bye in NVRAM is 0, trim it */
+	
 	if (ptr[NVS_DATA_OFFSET + len - 1] == 0)
 		len -= 1;
 
@@ -151,10 +203,10 @@ static unsigned strip_nvs_param(char *param)
 	if (!param)
 		return -EINVAL;
 	ptr = get_wifi_nvs_ram();
-	/* Size in format LE assumed */
+	
 	memcpy(&len, ptr + NVS_LEN_OFFSET, sizeof(len));
 
-	/* the last bye in NVRAM is 0, trim it */
+	
 	if (ptr[NVS_DATA_OFFSET + len - 1] == 0)
 		len -= 1;
 
@@ -162,7 +214,7 @@ static unsigned strip_nvs_param(char *param)
 
 	param_len = strlen(param);
 
-	/* search param */
+	
 	for (start_idx = 0; start_idx < len - param_len; start_idx++) {
 		if (memcmp(&nvs_data[start_idx], param, param_len) == 0)
 			break;
@@ -170,7 +222,7 @@ static unsigned strip_nvs_param(char *param)
 
 	end_idx = 0;
 	if (start_idx < len - param_len) {
-		/* search end-of-line */
+		
 		for (end_idx = start_idx + param_len; end_idx < len; end_idx++) {
 			if (nvs_data[end_idx] == '\n' || nvs_data[end_idx] == 0)
 				break;
@@ -178,7 +230,7 @@ static unsigned strip_nvs_param(char *param)
 	}
 
 	if (start_idx < end_idx) {
-		/* move the remain data forward */
+		
 		for (; end_idx + 1 < len; start_idx++, end_idx++)
 			nvs_data[start_idx] = nvs_data[end_idx+1];
 
@@ -190,7 +242,7 @@ static unsigned strip_nvs_param(char *param)
 #endif
 
 #define WIFI_MAC_PARAM_STR     "macaddr="
-#define WIFI_MAX_MAC_LEN       17 /* XX:XX:XX:XX:XX:XX */
+#define WIFI_MAX_MAC_LEN       17 
 
 static uint
 get_mac_from_wifi_nvs_ram(char *buf, unsigned int buf_len)
@@ -210,11 +262,11 @@ get_mac_from_wifi_nvs_ram(char *buf, unsigned int buf_len)
 	if (mac_ptr) {
 		mac_ptr += strlen(WIFI_MAC_PARAM_STR);
 
-		/* skip leading space */
+		
 		while (mac_ptr[0] == ' ')
 			mac_ptr++;
 
-		/* locate end-of-line */
+		
 		len = 0;
 		while (mac_ptr[len] != '\r' && mac_ptr[len] != '\n' &&
 			mac_ptr[len] != '\0') {
@@ -241,7 +293,7 @@ int protou_wifi_get_mac_addr(unsigned char *buf)
 
 	mac_len = get_mac_from_wifi_nvs_ram(mac, WIFI_MAX_MAC_LEN);
 	if (mac_len > 0) {
-		/*Mac address to pattern*/
+		
 		sscanf(mac, "%02x:%02x:%02x:%02x:%02x:%02x",
 		&macpattern[0], &macpattern[1], &macpattern[2],
 		&macpattern[3], &macpattern[4], &macpattern[5]

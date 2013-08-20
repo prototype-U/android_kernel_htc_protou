@@ -28,7 +28,6 @@
 #endif
 
 #include <linux/ion.h>
-
 #define MSM_CAM_IOCTL_MAGIC 'm'
 
 #define MSM_CAM_IOCTL_GET_SENSOR_INFO \
@@ -187,22 +186,19 @@
 #define MSM_CAM_IOCTL_GET_ACTUATOR_INFO \
 	_IOW(MSM_CAM_IOCTL_MAGIC, 52, struct msm_actuator_cfg_data *)
 
-#define MSM_CAM_IOCTL_EEPROM_IO_CFG \
-	_IOW(MSM_CAM_IOCTL_MAGIC, 53, struct msm_eeprom_cfg_data *)
+#define QCT_IOCTL_MAX 54 
 
-/* HTC_START chris 20120706 */
-#define QCT_IOCTL_MAX 53 // changes according to QCT definition
-
-/* for HDR */
 #define MSM_CAM_IOCTL_ENABLE_DROP_FRAME \
 	_IOW(MSM_CAM_IOCTL_MAGIC, QCT_IOCTL_MAX+1, int *)
 
 #define MSM_CAM_IOCTL_SET_DROP_FRAME_NUM \
 	_IOW(MSM_CAM_IOCTL_MAGIC, QCT_IOCTL_MAX+2, int *)
 
+#define MSM_CAM_IOCTL_RETURN_FREE_FRAME \
+	_IOR(MSM_CAM_IOCTL_MAGIC, QCT_IOCTL_MAX+3, struct msm_cam_evt_divert_frame *)
+
 #define MSM_CAM_IOCTL_SET_PERF_LOCK \
-	_IOW(MSM_CAM_IOCTL_MAGIC, QCT_IOCTL_MAX+3, int *)
-/* HTC_END */
+	_IOW(MSM_CAM_IOCTL_MAGIC, QCT_IOCTL_MAX+4, int *)
 
 struct msm_mctl_pp_cmd {
 	int32_t  id;
@@ -220,6 +216,7 @@ struct msm_mctl_post_proc_cmd {
 #define MSM_CAMERA_LED_HIGH 2
 #define MSM_CAMERA_LED_INIT 3
 #define MSM_CAMERA_LED_RELEASE 4
+#define MSM_CAMERA_LED_VIDEO 30
 
 #define MSM_CAMERA_STROBE_FLASH_NONE 0
 #define MSM_CAMERA_STROBE_FLASH_XENON 1
@@ -236,7 +233,6 @@ struct msm_mctl_post_proc_cmd {
 #define MAX_ACTUATOR_TYPE_SIZE 32
 #define MAX_ACTUATOR_REG_TBL_SIZE 8
 
-
 #define MSM_MAX_CAMERA_CONFIGS 2
 
 #define PP_SNAP  0x01
@@ -248,78 +244,65 @@ struct msm_mctl_post_proc_cmd {
 #define MSM_CAM_CTRL_CMD_DONE  0
 #define MSM_CAM_SENSOR_VFE_CMD 1
 
-/* Should be same as VIDEO_MAX_PLANES in videodev2.h */
 #define MAX_PLANES 8
 
 
-/*****************************************************
- *  structure
- *****************************************************/
-
-/* define five type of structures for userspace <==> kernel
- * space communication:
- * command 1 - 2 are from userspace ==> kernel
- * command 3 - 4 are from kernel ==> userspace
- *
- * 1. control command: control command(from control thread),
- *                     control status (from config thread);
- */
 struct msm_ctrl_cmd {
 	uint16_t type;
 	uint16_t length;
 	void *value;
 	uint16_t status;
 	uint32_t timeout_ms;
-	int resp_fd; /* FIXME: to be used by the kernel, pass-through for now */
-	int vnode_id;  /* video dev id. Can we overload resp_fd? */
+	int resp_fd; 
+	int vnode_id;  
 	int queue_idx;
 	uint32_t evt_id;
-	uint32_t stream_type; /* used to pass value to qcamera server */
-	int config_ident; /*used as identifier for config node*/
+	uint32_t stream_type; 
+	int config_ident; 
 };
 
 struct msm_cam_evt_msg {
-	unsigned short type;	/* 1 == event (RPC), 0 == message (adsp) */
+	unsigned short type;	
 	unsigned short msg_id;
-	unsigned int len;	/* size in, number of bytes out */
+	unsigned int len;	
 	uint32_t frame_id;
 	void *data;
 	struct timespec timestamp;
 };
 
 struct msm_pp_frame_sp {
-	/* phy addr of the buffer */
+	
 	unsigned long  phy_addr;
 	uint32_t       y_off;
 	uint32_t       cbcr_off;
-	/* buffer length */
+	
 	uint32_t       length;
 	int32_t        fd;
 	uint32_t       addr_offset;
-	/* mapped addr */
+	
 	unsigned long  vaddr;
 };
 
 struct msm_pp_frame_mp {
-	/* phy addr of the plane */
+	
 	unsigned long  phy_addr;
-	/* offset of plane data */
+	
 	uint32_t       data_offset;
-	/* plane length */
+	
 	uint32_t       length;
 	int32_t        fd;
 	uint32_t       addr_offset;
-	/* mapped addr */
+	
 	unsigned long  vaddr;
 };
 
 struct msm_pp_frame {
-	uint32_t       handle; /* stores vb cookie */
+	uint32_t       handle; 
 	uint32_t       frame_id;
 	unsigned short buf_idx;
 	int            path;
 	unsigned short image_type;
-	unsigned short num_planes; /* 1 for sp */
+	unsigned short num_planes; 
 	struct timeval timestamp;
 	union {
 		struct msm_pp_frame_sp sp;
@@ -338,9 +321,9 @@ struct msm_cam_evt_divert_frame {
 };
 
 struct msm_mctl_pp_cmd_ack_event {
-	uint32_t cmd;        /* VPE_CMD_ZOOM? */
-	int      status;     /* 0 done, < 0 err */
-	uint32_t cookie;     /* daemon's cookie */
+	uint32_t cmd;        
+	int      status;     
+	uint32_t cookie;     
 };
 
 struct msm_mctl_pp_event_info {
@@ -373,26 +356,19 @@ struct msm_isp_event_ctrl {
 #define MSM_CAM_APP_NOTIFY_EVENT  0
 #define MSM_CAM_APP_NOTIFY_ERROR_EVENT  1
 
-/* this one is used to send ctrl/status up to config thread */
 
 struct msm_stats_event_ctrl {
-	/* 0 - ctrl_cmd from control thread,
-	 * 1 - stats/event kernel,
-	 * 2 - V4L control or read request */
 	int resptype;
 	int timeout_ms;
 	struct msm_ctrl_cmd ctrl_cmd;
-	/* struct  vfe_event_t  stats_event; */
+	
 	struct msm_cam_evt_msg stats_event;
 };
 
-/* 2. config command: config command(from config thread); */
 struct msm_camera_cfg_cmd {
-	/* what to config:
-	 * 1 - sensor config, 2 - vfe config */
 	uint16_t cfg_type;
 
-	/* sensor config type */
+	
 	uint16_t cmd_type;
 	uint16_t queue;
 	uint16_t length;
@@ -450,6 +426,7 @@ struct msm_camera_cfg_cmd {
 #define CMD_AXI_CFG_ZSL 43
 #define CMD_AXI_CFG_SNAP_VPE 44
 #define CMD_AXI_CFG_SNAP_THUMB_VPE 45
+
 #define CMD_CONFIG_PING_ADDR 46
 #define CMD_CONFIG_PONG_ADDR 47
 #define CMD_CONFIG_FREE_BUF_ADDR 48
@@ -463,7 +440,13 @@ struct msm_camera_cfg_cmd {
 #define CMD_AXI_CFG_SEC			0xF4
 #define CMD_AXI_CFG_SEC_ALL_CHNLS	0xF8
 
-/* vfe config command: config command(from config thread)*/
+#define CMD_STATS_BG_ENABLE 53
+#define CMD_STATS_BF_ENABLE 54
+#define CMD_STATS_BHIST_ENABLE 55
+#define CMD_STATS_BG_BUF_RELEASE 56
+#define CMD_STATS_BF_BUF_RELEASE 57
+#define CMD_STATS_BHIST_BUF_RELEASE 58
+
 struct msm_vfe_cfg_cmd {
 	int cmd_type;
 	uint16_t length;
@@ -501,7 +484,10 @@ struct camera_enable_cmd {
 #define MSM_PMEM_C2D			17
 #define MSM_PMEM_MAINIMG_VPE    18
 #define MSM_PMEM_THUMBNAIL_VPE  19
-#define MSM_PMEM_MAX            20
+#define MSM_PMEM_BAYER_GRID		20
+#define MSM_PMEM_BAYER_FOCUS	21
+#define MSM_PMEM_BAYER_HIST		22
+#define MSM_PMEM_MAX            23
 
 #define STAT_AEAW			0
 #define STAT_AEC			1
@@ -511,7 +497,10 @@ struct camera_enable_cmd {
 #define STAT_CS				5
 #define STAT_IHIST			6
 #define STAT_SKIN			7
-#define STAT_MAX			8
+#define STAT_BG				8
+#define STAT_BF				9
+#define STAT_BHIST			10
+#define STAT_MAX			11
 
 #define FRAME_PREVIEW_OUTPUT1		0
 #define FRAME_PREVIEW_OUTPUT2		1
@@ -547,8 +536,8 @@ struct outputCfg {
 
 #define OUTPUT_1	0
 #define OUTPUT_2	1
-#define OUTPUT_1_AND_2            2   /* snapshot only */
-#define OUTPUT_1_AND_3            3   /* video */
+#define OUTPUT_1_AND_2            2   
+#define OUTPUT_1_AND_3            3   
 #define CAMIF_TO_AXI_VIA_OUTPUT_2 4
 #define OUTPUT_1_AND_CAMIF_TO_AXI_VIA_OUTPUT_2 5
 #define OUTPUT_2_AND_CAMIF_TO_AXI_VIA_OUTPUT_1 6
@@ -617,6 +606,7 @@ struct msm_frame {
 
 	struct ion_allocation_data ion_alloc;
 	struct ion_fd_data fd_data;
+	int ion_dev_fd;
 };
 
 enum msm_st_frame_packing {
@@ -677,15 +667,11 @@ struct msm_stats_buf {
 	uint32_t frame_id;
 };
 #define MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT 0
-/* video capture mode in VIDIOC_S_PARM */
 #define MSM_V4L2_EXT_CAPTURE_MODE_PREVIEW \
 	(MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT+1)
-/* extendedmode for video recording in VIDIOC_S_PARM */
 #define MSM_V4L2_EXT_CAPTURE_MODE_VIDEO \
 	(MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT+2)
-/* extendedmode for the full size main image in VIDIOC_S_PARM */
 #define MSM_V4L2_EXT_CAPTURE_MODE_MAIN (MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT+3)
-/* extendedmode for the thumb nail image in VIDIOC_S_PARM */
 #define MSM_V4L2_EXT_CAPTURE_MODE_THUMBNAIL \
 	(MSM_V4L2_EXT_CAPTURE_MODE_DEFAULT+4)
 #define MSM_V4L2_EXT_CAPTURE_MODE_RAW \
@@ -714,19 +700,12 @@ struct msm_stats_buf {
 #define MSM_V4L2_PID_PP_PLANE_INFO          (V4L2_CID_PRIVATE_BASE+18)
 #define MSM_V4L2_PID_MAX                    MSM_V4L2_PID_PP_PLANE_INFO
 
-/* camera operation mode for video recording - two frame output queues */
 #define MSM_V4L2_CAM_OP_DEFAULT         0
-/* camera operation mode for video recording - two frame output queues */
 #define MSM_V4L2_CAM_OP_PREVIEW         (MSM_V4L2_CAM_OP_DEFAULT+1)
-/* camera operation mode for video recording - two frame output queues */
 #define MSM_V4L2_CAM_OP_VIDEO           (MSM_V4L2_CAM_OP_DEFAULT+2)
-/* camera operation mode for standard shapshot - two frame output queues */
 #define MSM_V4L2_CAM_OP_CAPTURE         (MSM_V4L2_CAM_OP_DEFAULT+3)
-/* camera operation mode for zsl shapshot - three output queues */
 #define MSM_V4L2_CAM_OP_ZSL             (MSM_V4L2_CAM_OP_DEFAULT+4)
-/* camera operation mode for raw snapshot - one frame output queue */
 #define MSM_V4L2_CAM_OP_RAW             (MSM_V4L2_CAM_OP_DEFAULT+5)
-/* camera operation mode for jpeg snapshot - one frame output queue */
 #define MSM_V4L2_CAM_OP_JPEG_CAPTURE    (MSM_V4L2_CAM_OP_DEFAULT+6)
 
 
@@ -796,38 +775,63 @@ struct msm_snapshot_pp_status {
 #define CFG_GET_3D_CALI_DATA 30
 #define CFG_GET_CALIB_DATA		31
 #define CFG_GET_OUTPUT_INFO		32
-#define CFG_GET_EEPROM_INFO		33
-#define CFG_GET_EEPROM_DATA		34
-#define CFG_SET_ACTUATOR_INFO		35
-#define CFG_GET_ACTUATOR_INFO           36
-/* TBD: QRD */
-#define CFG_SET_SATURATION            37
-#define CFG_SET_SHARPNESS             38
-#define CFG_SET_TOUCHAEC              39
-#define CFG_SET_AUTO_FOCUS            40
-#define CFG_SET_AUTOFLASH             41
-#define CFG_SET_EXPOSURE_COMPENSATION 42
-#define CFG_SET_ISO                   43
-/* HTC_START */
-#define CFG_GET_ACTUATOR_CURR_STEP_POS 44 /* HTC Angie 20111212 - Rawchip */
-#define CFG_GET_VCM_OPTIMIZED_POSITIONS 45 /* HTC Awii 20120306 */
-#define CFG_MAX			46
-/* HTC_END */
+#define CFG_GET_EEPROM_DATA		33
+#define CFG_SET_ACTUATOR_INFO		34
+#define CFG_GET_ACTUATOR_INFO           35
+#define CFG_SET_SATURATION            36
+#define CFG_SET_SHARPNESS             37
+#define CFG_SET_TOUCHAEC              38
+#define CFG_SET_AUTO_FOCUS            39
+#define CFG_SET_AUTOFLASH             40
+#define CFG_SET_EXPOSURE_COMPENSATION 41
+#define CFG_SET_ISO                   42
+#if 1 
+#define CFG_SET_OV_LSC_RAW_CAPTURE 43
+#define CFG_SET_COORDINATE		44
+#define CFG_RUN_AUTO_FOCUS		45
+#define CFG_CANCEL_AUTO_FOCUS		46
+#define CFG_GET_EXP_FOR_LED		47
+#define CFG_UPDATE_AEC_FOR_LED		48
+#define CFG_SET_FRONT_CAMERA_MODE	49
+#define CFG_SET_QCT_LSC_RAW_CAPTURE 50
+#define CFG_SET_QTR_SIZE_MODE		51
+#define CFG_GET_AF_STATE		52
+#define CFG_SET_DMODE			53
+#define CFG_SET_CALIBRATION	54
+#define CFG_SET_AF_MODE		55
+#define CFG_GET_SP3D_L_FRAME	56
+#define CFG_GET_SP3D_R_FRAME	57
+#define CFG_SET_FLASHLIGHT		58
+#define CFG_SET_FLASHLIGHT_EXP_DIV 59
+#define CFG_GET_ISO             60
+#define CFG_GET_EXP_GAIN	61
+#define CFG_SET_FRAMERATE 	62
+#endif 
+#define CFG_GET_ACTUATOR_CURR_STEP_POS 63
+#define CFG_GET_VCM_OPTIMIZED_POSITIONS 64 
+#define CFG_SET_ACTUATOR_AF_ALGO		65 
+#define CFG_SET_OIS_MODE                         66 
+#define CFG_SET_HDR_EXP_GAIN           67 
+#define CFG_UPDATE_OIS_TBL           68 
 
-/* HTC_START */
-// Ray add for read fuse id command
+#define CFG_START_STREAM              69
+#define CFG_STOP_STREAM               70
+#define CFG_GET_CSI_PARAMS            71
+
+#define CFG_MAX			69
+
 #define CFG_I2C_IOCTL_R_OTP 70
-/* HTC_END */
 
 #define MOVE_NEAR	0
 #define MOVE_FAR	1
 
-#define SENSOR_PREVIEW_MODE		0
-#define SENSOR_SNAPSHOT_MODE		1
-#define SENSOR_RAW_SNAPSHOT_MODE	2
+#define SENSOR_PREVIEW_MODE		0 
+#define SENSOR_SNAPSHOT_MODE		1 
+#define SENSOR_RAW_SNAPSHOT_MODE	2 
 #define SENSOR_HFR_60FPS_MODE 3
 #define SENSOR_HFR_90FPS_MODE 4
 #define SENSOR_HFR_120FPS_MODE 5
+#define SENSOR_PREVIEW_MODE_WIDE 6
 
 #define SENSOR_QTR_SIZE			0
 #define SENSOR_FULL_SIZE		1
@@ -848,13 +852,11 @@ struct msm_snapshot_pp_status {
 #define CAMERA_EFFECT_NEON		11
 #define CAMERA_EFFECT_MAX		12
 
-/* QRD */
 #define CAMERA_EFFECT_BW		10
 #define CAMERA_EFFECT_BLUISH	12
 #define CAMERA_EFFECT_REDDISH	13
 #define CAMERA_EFFECT_GREENISH	14
 
-/* QRD */
 #define CAMERA_ANTIBANDING_OFF		0
 #define CAMERA_ANTIBANDING_50HZ		2
 #define CAMERA_ANTIBANDING_60HZ		1
@@ -907,7 +909,7 @@ struct msm_snapshot_pp_status {
 #define CAMERA_SETAE_AVERAGE		0
 #define CAMERA_SETAE_CENWEIGHT	1
 
-#define  CAMERA_WB_AUTO               1 /* This list must match aeecamera.h */
+#define  CAMERA_WB_AUTO               1 
 #define  CAMERA_WB_CUSTOM             2
 #define  CAMERA_WB_INCANDESCENT       3
 #define  CAMERA_WB_FLUORESCENT        4
@@ -935,7 +937,6 @@ enum msm_v4l2_saturation_level {
 	MSM_V4L2_SATURATION_L9,
 	MSM_V4L2_SATURATION_L10,
 };
-
 enum msm_v4l2_contrast_level {
 	MSM_V4L2_CONTRAST_L0,
 	MSM_V4L2_CONTRAST_L1,
@@ -1033,6 +1034,9 @@ struct sensor_pict_fps {
 struct exp_gain_cfg {
 	uint16_t gain;
 	uint32_t line;
+	uint32_t long_line;
+	uint32_t short_line;
+	uint16_t dig_gain; 
 };
 
 struct focus_cfg {
@@ -1090,12 +1094,12 @@ struct sensor_init_cfg {
 };
 
 struct sensor_calib_data {
-	/* Color Related Measurements */
+	
 	uint16_t r_over_g;
 	uint16_t b_over_g;
 	uint16_t gr_over_gb;
 
-	/* Lens Related Measurements */
+	
 	uint16_t macro_2_inf;
 	uint16_t inf_2_macro;
 	uint16_t stroke_amt;
@@ -1106,7 +1110,13 @@ struct sensor_calib_data {
 enum msm_sensor_resolution_t {
 	MSM_SENSOR_RES_FULL,
 	MSM_SENSOR_RES_QTR,
-	MSM_SENSOR_RES_VIDEO, /* HTC Angie 20120622 */
+	MSM_SENSOR_RES_VIDEO,
+	MSM_SENSOR_RES_VIDEO_HFR,
+	MSM_SENSOR_RES_16_9,
+	MSM_SENSOR_RES_4_3,
+	MSM_SENSOR_RES_VIDEO_HFR_5_3,
+	MSM_SENSOR_RES_5_3,
+	MSM_SENSOR_RES_2,
 	MSM_SENSOR_RES_3,
 	MSM_SENSOR_RES_4,
 	MSM_SENSOR_RES_5,
@@ -1123,7 +1133,7 @@ struct msm_sensor_output_info_t {
 	uint32_t vt_pixel_clk;
 	uint32_t op_pixel_clk;
 	uint16_t binning_factor;
-/* HTC_START */
+	
 	uint16_t x_addr_start;
 	uint16_t y_addr_start;
 	uint16_t x_addr_end;
@@ -1133,19 +1143,23 @@ struct msm_sensor_output_info_t {
 	uint16_t y_even_inc;
 	uint16_t y_odd_inc;
 	uint8_t binning_rawchip;
-/* HTC_END */
+	uint8_t is_hdr;
+	
 };
 
 struct sensor_output_info_t {
 	struct msm_sensor_output_info_t *output_info;
 	uint16_t num_info;
-/* HTC_START Angie 20120723 - Fix FPS */
+ 
 	uint16_t vert_offset;
 	uint16_t min_vert;
-/* HTC_END */
-/* HTC_START chris 20120618 */
-	uint32_t sensor_max_linecount;
-/* HTC_END */
+	int mirror_flip;
+	uint32_t sensor_max_linecount; 
+};
+
+struct sensor_eeprom_data_t {
+	void *eeprom_data;
+	uint16_t index;
 };
 
 struct mirror_flip {
@@ -1158,28 +1172,110 @@ struct cord {
 	uint32_t y;
 };
 
-struct msm_eeprom_data_t {
-	void *eeprom_data;
-	uint16_t index;
+#if 1 
+enum antibanding_mode{
+	CAMERA_ANTI_BANDING_50HZ,
+	CAMERA_ANTI_BANDING_60HZ,
+	CAMERA_ANTI_BANDING_AUTO,
 };
 
-/* HTC_START Awii 20120306 */
-typedef struct{
-    uint16_t min;
-    uint16_t med;
-    uint16_t max;
-}vcm_pos;
-/* HTC_END*/
+enum brightness_t{
+	CAMERA_BRIGHTNESS_N3,
+	CAMERA_BRIGHTNESS_N2,
+	CAMERA_BRIGHTNESS_N1,
+	CAMERA_BRIGHTNESS_D,
+	CAMERA_BRIGHTNESS_P1,
+	CAMERA_BRIGHTNESS_P2,
+	CAMERA_BRIGHTNESS_P3,
+	CAMERA_BRIGHTNESS_P4,
+	CAMERA_BRIGHTNESS_N4,
+};
 
-/* HTC_START */
-// Ray add fuse id structure
+enum frontcam_t{
+	CAMERA_MIRROR,
+	CAMERA_REVERSE,
+	CAMERA_PORTRAIT_REVERSE, 
+};
+
+enum wb_mode{
+	CAMERA_AWB_AUTO,
+	CAMERA_AWB_CLOUDY,
+	CAMERA_AWB_INDOOR_HOME,
+	CAMERA_AWB_INDOOR_OFFICE,
+	CAMERA_AWB_SUNNY,
+};
+
+enum iso_mode{
+  CAMERA_ISO_MODE_AUTO = 0,
+  CAMERA_ISO_MODE_DEBLUR,
+  CAMERA_ISO_MODE_100,
+  CAMERA_ISO_MODE_200,
+  CAMERA_ISO_MODE_400,
+  CAMERA_ISO_MODE_800,
+  CAMERA_ISO_MODE_1250,
+  CAMERA_ISO_MODE_1600,
+  CAMERA_ISO_MODE_MAX
+};
+
+enum sharpness_mode{
+	CAMERA_SHARPNESS_X0,
+	CAMERA_SHARPNESS_X1,
+	CAMERA_SHARPNESS_X2,
+	CAMERA_SHARPNESS_X3,
+	CAMERA_SHARPNESS_X4,
+	CAMERA_SHARPNESS_X5,
+	CAMERA_SHARPNESS_X6,
+};
+
+enum saturation_mode{
+	CAMERA_SATURATION_X0,
+	CAMERA_SATURATION_X05,
+	CAMERA_SATURATION_X1,
+	CAMERA_SATURATION_X15,
+	CAMERA_SATURATION_X2,
+};
+
+enum contrast_mode{
+	CAMERA_CONTRAST_N2,
+	CAMERA_CONTRAST_N1,
+	CAMERA_CONTRAST_D,
+	CAMERA_CONTRAST_P1,
+	CAMERA_CONTRAST_P2,
+};
+
+enum qtr_size_mode{
+	NORMAL_QTR_SIZE_MODE,
+	LARGER_QTR_SIZE_MODE,
+};
+
+enum sensor_af_mode{
+	SENSOR_AF_MODE_AUTO,
+	SENSOR_AF_MODE_NORMAL,
+	SENSOR_AF_MODE_MACRO,
+};
+#endif 
+
 struct fuse_id{
 	uint32_t fuse_id_word1;
 	uint32_t fuse_id_word2;
 	uint32_t fuse_id_word3;
 	uint32_t fuse_id_word4;
 };
-/* HTC_END */
+
+typedef struct{
+    uint16_t min;
+    uint16_t med;
+    uint16_t max;
+}vcm_pos;
+
+struct csi_lane_params_t {
+	uint8_t csi_lane_assign;
+	uint8_t csi_lane_mask;
+	uint8_t csi_if;
+	uint8_t csid_core;
+	uint32_t csid_version;
+};
+
 
 struct sensor_cfg_data {
 	int cfgtype;
@@ -1206,8 +1302,9 @@ struct sensor_cfg_data {
 		struct sensor_3d_exp_cfg sensor_3d_exp;
 		struct sensor_calib_data calib_info;
 		struct sensor_output_info_t output_info;
-		struct msm_eeprom_data_t eeprom_data;
-		/* QRD */
+		struct sensor_eeprom_data_t eeprom_data;
+		struct csi_lane_params_t csi_lane_params;
+		
 		uint16_t antibanding;
 		uint8_t contrast;
 		uint8_t saturation;
@@ -1219,15 +1316,32 @@ struct sensor_cfg_data {
 		struct cord aec_cord;
 		int is_autoflash;
 		struct mirror_flip mirror_flip;
-		/* HTC_START Awii 20120306 */
-		vcm_pos calib_vcm_pos;
-		/* HTC_END */
-		/* HTC_START */
-		/* Ray add fuse to member */		
+
+		
+		
 		struct fuse_id fuse;
-		/* HTC_END */
+		
+		vcm_pos calib_vcm_pos; 
+#if 1 
+		enum antibanding_mode antibanding_value;
+		enum brightness_t brightness_value;
+		enum frontcam_t frontcam_value;
+		enum wb_mode wb_value;
+		enum iso_mode iso_value;
+		enum sharpness_mode sharpness_value;
+		enum saturation_mode saturation_value;
+		enum contrast_mode contrast_value;
+		enum qtr_size_mode qtr_size_mode_value;
+		enum sensor_af_mode af_mode_value;
+#endif 
+
 	} cfg;
 };
+
+typedef enum {
+  AF_ALGO_QCT,
+  AF_ALGO_RAWCHIP,
+} af_algo_t;
 
 struct damping_params_t {
 	uint32_t damping_step;
@@ -1269,9 +1383,6 @@ struct reg_settings_t {
 };
 
 struct region_params_t {
-	/* [0] = ForwardDirection Macro boundary
-	   [1] = ReverseDirection Inf boundary
-	 */
 	uint16_t step_bound[2];
 	uint16_t code_per_step;
 };
@@ -1305,6 +1416,9 @@ struct msm_actuator_params_t {
 };
 
 struct msm_actuator_set_info_t {
+	uint32_t total_steps; 
+	uint16_t gross_steps; 
+	uint16_t fine_steps; 
 	struct msm_actuator_params_t actuator_params;
 	struct msm_actuator_tuning_params_t af_tuning_params;
 };
@@ -1339,68 +1453,15 @@ enum af_camera_name {
 struct msm_actuator_cfg_data {
 	int cfgtype;
 	uint8_t is_af_supported;
+	uint8_t is_ois_supported;
 	union {
 		struct msm_actuator_move_params_t move;
 		struct msm_actuator_set_info_t set_info;
 		struct msm_actuator_get_info_t get_info;
-		/* HTC_START */
-		int16_t curr_step_pos; /* HTC Angie 20111212 - Rawchip */
-		/* HTC_END */
 		enum af_camera_name cam_name;
-	} cfg;
-};
-
-struct msm_eeprom_support {
-	uint16_t is_supported;
-	uint16_t size;
-	uint16_t index;
-	uint16_t qvalue;
-};
-
-struct msm_calib_wb {
-	uint16_t r_over_g;
-	uint16_t b_over_g;
-	uint16_t gr_over_gb;
-};
-
-struct msm_calib_af {
-	uint16_t macro_dac;
-	uint16_t inf_dac;
-	uint16_t start_dac;
-};
-
-struct msm_calib_lsc {
-	uint16_t r_gain[221];
-	uint16_t b_gain[221];
-	uint16_t gr_gain[221];
-	uint16_t gb_gain[221];
-};
-
-struct pixel_t {
-	int x;
-	int y;
-};
-
-struct msm_calib_dpc {
-	uint16_t validcount;
-	struct pixel_t snapshot_coord[128];
-	struct pixel_t preview_coord[128];
-	struct pixel_t video_coord[128];
-};
-
-struct msm_camera_eeprom_info_t {
-	struct msm_eeprom_support af;
-	struct msm_eeprom_support wb;
-	struct msm_eeprom_support lsc;
-	struct msm_eeprom_support dpc;
-};
-
-struct msm_eeprom_cfg_data {
-	int cfgtype;
-	uint8_t is_eeprom_supported;
-	union {
-		struct msm_eeprom_data_t get_data;
-		struct msm_camera_eeprom_info_t get_info;
+		int16_t curr_step_pos; 
+		af_algo_t af_algo; 
+		int16_t ois_mode; 
 	} cfg;
 };
 
@@ -1461,6 +1522,12 @@ struct flash_ctrl_data {
 	} ctrl_data;
 };
 
+enum htc_camera_image_type {
+	HTC_CAMERA_IMAGE_NONE,
+	HTC_CAMERA_IMAGE_YUSHANII,
+	HTC_CAMERA_IMAGE_MAX,
+};
+
 #define GET_NAME			0
 #define GET_PREVIEW_LINE_PER_FRAME	1
 #define GET_PREVIEW_PIXELS_PER_LINE	2
@@ -1478,14 +1545,15 @@ struct msm_camsensor_info {
 	uint8_t support_3d;
 	enum flash_type flashtype;
 	enum sensor_type_t sensor_type;
-	uint32_t pxlcode; /* enum v4l2_mbus_pixelcode */
-	uint32_t camera_type; /* msm_camera_type */
+	uint32_t pxlcode; 
+	uint32_t camera_type; 
 	int mount_angle;
 	uint32_t max_width;
 	uint32_t max_height;
-	/* HTC_START */
-	uint8_t use_rawchip;
-	/* HTC_END */
+	enum htc_camera_image_type htc_image;	
+	uint8_t hdr_mode;	
+	uint8_t use_rawchip; 
+	uint8_t video_hdr_capability;
 };
 
 #define V4L2_SINGLE_PLANE	0
@@ -1504,7 +1572,7 @@ struct img_plane_info {
 	uint32_t width;
 	uint32_t height;
 	uint32_t pixelformat;
-	uint8_t buffer_type; /*Single/Multi planar*/
+	uint8_t buffer_type; 
 	uint8_t output_port;
 	uint32_t ext_mode;
 	uint8_t num_planes;
@@ -1516,7 +1584,6 @@ struct img_plane_info {
 #define QCAMERA_NAME "qcamera"
 #define QCAMERA_DEVICE_GROUP_ID 1
 #define QCAMERA_VNODE_GROUP_ID 2
-
 #define MSM_CAM_V4L2_IOCTL_GET_CAMERA_INFO \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 1, struct msm_camera_v4l2_ioctl_t *)
 
@@ -1531,7 +1598,7 @@ struct img_plane_info {
 
 #define MSM_CAM_V4L2_IOCTL_GET_EVENT_PAYLOAD \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 5, struct msm_camera_v4l2_ioctl_t *)
-
+	
 #define MSM_CAM_IOCTL_SEND_EVENT \
 	_IOWR('V', BASE_VIDIOC_PRIVATE + 6, struct v4l2_event)
 
@@ -1539,4 +1606,10 @@ struct msm_camera_v4l2_ioctl_t {
 	void __user *ioctl_ptr;
 };
 
-#endif /* __LINUX_MSM_CAMERA_H */
+struct msm_ver_num_info {
+        uint32_t main;
+        uint32_t minor;
+        uint32_t rev;
+};
+
+#endif 
