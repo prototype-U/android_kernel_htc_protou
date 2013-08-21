@@ -28,9 +28,6 @@ struct kgsl_device;
 struct kgsl_ringbuffer_issueibcmds;
 struct kgsl_device_waittimestamp;
 
-/*
- * Tracepoint for kgsl issue ib commands
- */
 TRACE_EVENT(kgsl_issueibcmds,
 
 	TP_PROTO(struct kgsl_device *device,
@@ -78,9 +75,6 @@ TRACE_EVENT(kgsl_issueibcmds,
 	)
 );
 
-/*
- * Tracepoint for kgsl readtimestamp
- */
 TRACE_EVENT(kgsl_readtimestamp,
 
 	TP_PROTO(struct kgsl_device *device,
@@ -113,9 +107,6 @@ TRACE_EVENT(kgsl_readtimestamp,
 	)
 );
 
-/*
- * Tracepoint for kgsl waittimestamp entry
- */
 TRACE_EVENT(kgsl_waittimestamp_entry,
 
 	TP_PROTO(struct kgsl_device *device,
@@ -143,7 +134,7 @@ TRACE_EVENT(kgsl_waittimestamp_entry,
 	),
 
 	TP_printk(
-		"d_name=%s context_id=%u curr_ts=%u timestamp=0x%x timeout=%u",
+		"d_name=%s context_id=%u curr_ts=0x%x timestamp=0x%x timeout=%u",
 		__get_str(device_name),
 		__entry->context_id,
 		__entry->curr_ts,
@@ -152,9 +143,6 @@ TRACE_EVENT(kgsl_waittimestamp_entry,
 	)
 );
 
-/*
- * Tracepoint for kgsl waittimestamp exit
- */
 TRACE_EVENT(kgsl_waittimestamp_exit,
 
 	TP_PROTO(struct kgsl_device *device, unsigned int curr_ts,
@@ -175,7 +163,7 @@ TRACE_EVENT(kgsl_waittimestamp_exit,
 	),
 
 	TP_printk(
-		"d_name=%s curr_ts=%u result=%d",
+		"d_name=%s curr_ts=0x%x result=%d",
 		__get_str(device_name),
 		__entry->curr_ts,
 		__entry->result
@@ -386,7 +374,7 @@ DECLARE_EVENT_CLASS(kgsl_mem_timestamp_template,
 
 	TP_printk(
 		"d_name=%s gpuaddr=0x%08x size=%d type=%d ctx=%u"
-		" curr_ts=0x%08x free_ts=0x%08x",
+		" curr_ts=0x%x free_ts=0x%x",
 		__get_str(device_name),
 		__entry->gpuaddr,
 		__entry->size,
@@ -490,7 +478,6 @@ TRACE_EVENT(kgsl_mmu_pagefault,
 	)
 );
 
-#endif /* _KGSL_TRACE_H */
+#endif 
 
-/* This part must be outside protection */
 #include <trace/define_trace.h>
