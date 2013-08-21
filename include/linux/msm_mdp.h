@@ -46,6 +46,10 @@
 #define MSMFB_OVERLAY_BLT       _IOWR(MSMFB_IOCTL_MAGIC, 142, \
 						struct msmfb_overlay_blt)
 #define MSMFB_OVERLAY_BLT_OFFSET     _IOW(MSMFB_IOCTL_MAGIC, 143, unsigned int)
+#define MSMFB_DISPLAY_COMMIT      _IOW(MSMFB_IOCTL_MAGIC, 164, \
+						struct mdp_display_commit)
+#define MSMFB_METADATA_SET  _IOW(MSMFB_IOCTL_MAGIC, 165, struct msmfb_metadata)
+#define MSMFB_METADATA_GET  _IOW(MSMFB_IOCTL_MAGIC, 166, struct msmfb_metadata)
 #define MSMFB_HISTOGRAM_START	_IOR(MSMFB_IOCTL_MAGIC, 144, \
 						struct mdp_histogram_start_req)
 #define MSMFB_HISTOGRAM_STOP	_IOR(MSMFB_IOCTL_MAGIC, 145, unsigned int)
@@ -76,6 +80,7 @@
 #define FB_TYPE_3D_PANEL 0x10101010
 #define MDP_IMGTYPE2_START 0x10000
 #define MSMFB_DRIVER_VERSION	0xF9E8D701
+
 
 
 struct msmfb_usb_projector_info {
@@ -138,6 +143,56 @@ enum {
 	HSIC_INT,
 	HSIC_CON,
 	NUM_HSIC_PARAM,
+};
+
+#define FB_METADATA_VIDEO_INFO_CODE_SUPPORT 1
+enum {
+	metadata_op_none,
+	metadata_op_base_blend,
+	metadata_op_frame_rate,
+	metadata_op_vic,
+	metadata_op_wb_format,
+	metadata_op_get_caps,
+	metadata_op_max
+};
+
+struct mdp_blend_cfg {
+	uint32_t is_premultiplied;
+};
+
+struct mdp_mixer_cfg {
+	uint32_t writeback_format;
+	uint32_t alpha;
+};
+
+struct mdss_hw_caps {
+	uint32_t mdp_rev;
+	uint8_t rgb_pipes;
+	uint8_t vig_pipes;
+	uint8_t dma_pipes;
+	uint32_t features;
+};
+
+struct msmfb_metadata {
+	uint32_t op;
+	uint32_t flags;
+	union {
+		struct mdp_blend_cfg blend_cfg;
+		struct mdp_mixer_cfg mixer_cfg;
+		uint32_t panel_frame_rate;
+		uint32_t video_info_code;
+		struct mdss_hw_caps caps;
+	} data;
+};
+
+#define MDP_MAX_FENCE_FD	32
+
+#define MDP_DISPLAY_COMMIT_OVERLAY	1
+struct mdp_buf_fence {
+	uint32_t flags;
+	uint32_t acq_fen_fd_cnt;
+	int acq_fen_fd[MDP_MAX_FENCE_FD];
+	int rel_fen_fd[MDP_MAX_FENCE_FD];
 };
 
 #define MDSS_MDP_ROT_ONLY		0x80
