@@ -10,9 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-#include <linux/module.h>
 #include <linux/uaccess.h>
-#include <linux/sched.h>
 
 #include "kgsl.h"
 #include "kgsl_cffdump.h"
@@ -151,6 +149,7 @@ static struct z180_device device_2d0 = {
 			.config = Z180_MMU_CONFIG,
 		},
 		.pwrctrl = {
+			.regulator_name = "fs_gfx2d0",
 			.irq_name = KGSL_2D0_IRQ,
 		},
 		.iomemname = KGSL_2D0_REG_MEMORY,
@@ -178,6 +177,7 @@ static struct z180_device device_2d1 = {
 			.config = Z180_MMU_CONFIG,
 		},
 		.pwrctrl = {
+			.regulator_name = "fs_gfx2d1",
 			.irq_name = KGSL_2D1_IRQ,
 		},
 		.iomemname = KGSL_2D1_REG_MEMORY,
@@ -365,7 +365,7 @@ static int room_in_rb(struct z180_device *device)
 	return ts_diff < Z180_PACKET_COUNT;
 }
 
-static int z180_idle(struct kgsl_device *device)
+static int z180_idle(struct kgsl_device *device, unsigned int timeout)
 {
 	int status = 0;
 	struct z180_device *z180_dev = Z180_DEVICE(device);
@@ -373,8 +373,7 @@ static int z180_idle(struct kgsl_device *device)
 	if (timestamp_cmp(z180_dev->current_timestamp,
 		z180_dev->timestamp) > 0)
 		status = z180_wait(device, NULL,
-				z180_dev->current_timestamp,
-				Z180_IDLE_TIMEOUT);
+				z180_dev->current_timestamp, timeout);
 
 	if (status)
 		KGSL_DRV_ERR(device, "z180_waittimestamp() timed out\n");
@@ -591,7 +590,7 @@ error_clk_off:
 static int z180_stop(struct kgsl_device *device)
 {
 	device->ftbl->irqctrl(device, 0);
-	z180_idle(device);
+	z180_idle(device, KGSL_TIMEOUT_DEFAULT);
 
 	del_timer_sync(&device->idle_timer);
 
@@ -859,7 +858,7 @@ z180_drawctxt_destroy(struct kgsl_device *device,
 {
 	struct z180_device *z180_dev = Z180_DEVICE(device);
 
-	z180_idle(device);
+	z180_idle(device, KGSL_TIMEOUT_DEFAULT);
 
 	if (z180_dev->ringbuffer.prevctx == context->id) {
 		z180_dev->ringbuffer.prevctx = Z180_INVALID_CONTEXT;
